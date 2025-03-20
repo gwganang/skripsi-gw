@@ -1,135 +1,174 @@
 import streamlit as st
 import sqlite3
+import pandas as pd
 from datetime import datetime
 
-# Konfigurasi Database
+# === DATABASE CONFIG ===
 @st.cache_resource
 def get_connection():
-    conn = sqlite3.connect('database/inventaris.db', check_same_thread=False)
-    return conn
+    return sqlite3.connect('database/inventaris.db', check_same_thread=False)
 
 def init_db():
     conn = get_connection()
     c = conn.cursor()
+    
+    # Tabel Inventaris
     c.execute('''
         CREATE TABLE IF NOT EXISTS inventaris (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nama_barang TEXT NOT NULL,
+            nama_barang TEXT NOT NULL UNIQUE,
             jumlah_stok INTEGER NOT NULL CHECK (jumlah_stok >= 0),
-            satuan TEXT NOT NULL,
-            keterangan TEXT
+            satuan TEXT NOT NULL
         )
     ''')
+    
+    # Tabel Transaksi Masuk
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS transaksi_masuk (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER,
+            jumlah INTEGER NOT NULL CHECK (jumlah > 0),
+            tanggal DATE DEFAULT CURRENT_DATE,
+            keterangan TEXT,
+            FOREIGN KEY(item_id) REFERENCES inventaris(id)
+        )
+    ''')
+    
+    # Tabel Transaksi Keluar
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS transaksi_keluar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER,
+            jumlah INTEGER NOT NULL CHECK (jumlah > 0),
+            tanggal DATE DEFAULT CURRENT_DATE,
+            keterangan TEXT,
+            FOREIGN KEY(item_id) REFERENCES inventaris(id)
+        )
+    ''')
+    
+    # Trigger untuk transaksi keluar
+    c.execute('''
+        CREATE TRIGGER IF NOT EXISTS kurangi_stok
+        AFTER INSERT ON transaksi_keluar
+        FOR EACH ROW
+        BEGIN
+            UPDATE inventaris
+            SET jumlah_stok = jumlah_stok - NEW.jumlah
+            WHERE id = NEW.item_id
+            AND jumlah_stok >= NEW.jumlah;
+        END;
+    ''')
+    
     conn.commit()
 
 init_db()
 
-# Fungsi CRUD
-def create_data(nama, jumlah, satuan, keterangan):
+# === FUNGSI CRUD ===
+def get_items():
     conn = get_connection()
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO inventaris (nama_barang, jumlah_stok, satuan, keterangan)
-        VALUES (?, ?, ?, ?)
-    ''', (nama, jumlah, satuan, keterangan))
-    conn.commit()
+    return pd.read_sql("SELECT * FROM inventaris", conn)
 
-def read_data():
+def get_transaksi_masuk():
     conn = get_connection()
-    df = pd.read_sql_query("SELECT * FROM inventaris", conn)
-    return df
+    return pd.read_sql("""
+        SELECT tm.*, i.nama_barang 
+        FROM transaksi_masuk tm 
+        JOIN inventaris i ON tm.item_id = i.id
+    """, conn)
 
-def update_data(id, nama, jumlah, satuan, keterangan):
+def get_transaksi_keluar():
     conn = get_connection()
-    c = conn.cursor()
-    c.execute('''
-        UPDATE inventaris
-        SET nama_barang = ?, jumlah_stok = ?, satuan = ?, keterangan = ?
-        WHERE id = ?
-    ''', (nama, jumlah, satuan, keterangan, id))
-    conn.commit()
+    return pd.read_sql("""
+        SELECT tk.*, i.nama_barang 
+        FROM transaksi_keluar tk 
+        JOIN inventaris i ON tk.item_id = i.id
+    """, conn)
 
-def delete_data(id):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute('DELETE FROM inventaris WHERE id = ?', (id,))
-    conn.commit()
+# === STREAMLIT UI ===
+st.set_page_config(page_title="Sistem Inventaris", layout="wide")
+menu = ["Data Barang", "Transaksi Masuk", "Transaksi Keluar"]
+choice = st.sidebar.radio("Menu", menu)
 
-# Konfigurasi UI
-st.set_page_config(page_title="Inventaris ATK", layout="wide")
-st.title("Sistem Manajemen Inventaris ATK")
-
-menu = ["Lihat Data", "Tambah Data", "Edit Data", "Hapus Data"]
-choice = st.sidebar.selectbox("Menu", menu)
-
-if choice == "Lihat Data":
-    st.header("Daftar Inventaris")
-    df = read_data()
-    st.dataframe(df, use_container_width=True)
-
-elif choice == "Tambah Data":
-    st.header("Tambah Barang Baru")
-    with st.form("form_tambah", clear_on_submit=True):
-        nama = st.text_input("Nama Barang*", key="nama")
-        jumlah = st.number_input("Jumlah Stok*", min_value=0, key="jumlah")
-        satuan = st.selectbox("Satuan*", ["pcs", "box", "rim", "lusin"], key="satuan")
-        keterangan = st.text_area("Keterangan Tambahan", key="keterangan")
-        
-        submitted = st.form_submit_button("Simpan")
-        if submitted:
-            if nama and jumlah >= 0 and satuan:
-                try:
-                    create_data(nama, jumlah, satuan, keterangan)
-                    st.success("Data berhasil disimpan!")
-                except Exception as e:
-                    st.error(f"Gagal menyimpan data: {str(e)}")
-            else:
-                st.warning("Mohon lengkapi field wajib (*)")
-
-elif choice == "Edit Data":
-    st.header("Edit Barang")
-    df = read_data()
-    if df.empty:
-        st.info("Tidak ada data untuk diedit")
-    else:
-        edit_id = st.selectbox("Pilih ID Barang", df['id'].tolist())
-        selected_row = df[df['id'] == edit_id].iloc[0]
-        
-        with st.form(f"form_edit_{edit_id}"):
-            nama = st.text_input("Nama Barang*", value=selected_row['nama_barang'])
-            jumlah = st.number_input("Jumlah Stok*", 
-                                    value=selected_row['jumlah_stok'], 
-                                    min_value=0)
-            satuan = st.selectbox("Satuan*", 
-                                ["pcs", "box", "rim", "lusin"], 
-                                index=["pcs", "box", "rim", "lusin"].index(selected_row['satuan']))
-            keterangan = st.text_area("Keterangan Tambahan", 
-                                    value=selected_row['keterangan'])
+if choice == "Data Barang":
+    st.header("Data Barang")
+    df = get_items()
+    st.dataframe(df)
+    
+    with st.expander("Tambah Barang"):
+        with st.form("tambah_barang"):
+            nama = st.text_input("Nama Barang*")
+            jumlah = st.number_input("Jumlah Stok*", min_value=0)
+            satuan = st.selectbox("Satuan*", ["pcs", "box", "rim", "lusin"])
             
-            submitted = st.form_submit_button("Update")
-            if submitted:
+            if st.form_submit_button("Simpan"):
                 if nama and jumlah >= 0 and satuan:
                     try:
-                        update_data(edit_id, nama, jumlah, satuan, keterangan)
-                        st.success("Data berhasil diperbarui!")
-                    except Exception as e:
-                        st.error(f"Gagal memperbarui data: {str(e)}")
+                        conn = get_connection()
+                        conn.cursor().execute(
+                            "INSERT INTO inventaris (nama_barang, jumlah_stok, satuan) VALUES (?, ?, ?)",
+                            (nama, jumlah, satuan)
+                        )
+                        conn.commit()
+                        st.success("Barang berhasil ditambahkan")
+                    except sqlite3.IntegrityError:
+                        st.error("Nama barang sudah ada!")
                 else:
-                    st.warning("Mohon lengkapi field wajib (*)")
+                    st.warning("Lengkapi field wajib")
 
-elif choice == "Hapus Data":
-    st.header("Hapus Barang")
-    df = read_data()
-    if df.empty:
-        st.info("Tidak ada data untuk dihapus")
-    else:
-        delete_id = st.selectbox("Pilih ID Barang yang akan dihapus", df['id'].tolist())
-        selected_row = df[df['id'] == delete_id].iloc[0]
+elif choice == "Transaksi Masuk":
+    st.header("Transaksi Barang Masuk")
+    df = get_transaksi_masuk()
+    st.dataframe(df)
+    
+    with st.form("transaksi_masuk"):
+        item = st.selectbox("Barang", get_items()['nama_barang'].tolist())
+        jumlah = st.number_input("Jumlah*", min_value=1)
+        keterangan = st.text_area("Keterangan")
         
-        st.warning(f"Yakin ingin menghapus: {selected_row['nama_barang']}?")
-        if st.button("Hapus Permanen"):
-            try:
-                delete_data(delete_id)
-                st.success("Data berhasil dihapus!")
-            except Exception as e:
-                st.error(f"Gagal menghapus data: {str(e)}")
+        if st.form_submit_button("Tambah Transaksi"):
+            item_id = get_items()[get_items()['nama_barang'] == item].iloc[0]['id']
+            conn = get_connection()
+            conn.cursor().execute(
+                "INSERT INTO transaksi_masuk (item_id, jumlah, keterangan) VALUES (?, ?, ?)",
+                (item_id, jumlah, keterangan)
+            )
+            conn.commit()
+            # Update stok
+            conn.cursor().execute(
+                "UPDATE inventaris SET jumlah_stok = jumlah_stok + ? WHERE id = ?",
+                (jumlah, item_id)
+            )
+            conn.commit()
+            st.success("Transaksi berhasil!")
+
+elif choice == "Transaksi Keluar":
+    st.header("Transaksi Barang Keluar")
+    df = get_transaksi_keluar()
+    st.dataframe(df)
+    
+    with st.form("transaksi_keluar"):
+        item = st.selectbox("Barang", get_items()['nama_barang'].tolist())
+        jumlah = st.number_input("Jumlah*", min_value=1)
+        keterangan = st.text_area("Keterangan")
+        
+        if st.form_submit_button("Proses Transaksi"):
+            item_data = get_items()[get_items()['nama_barang'] == item].iloc[0]
+            if item_data['jumlah_stok'] >= jumlah:
+                item_id = item_data['id']
+                conn = get_connection()
+                conn.cursor().execute(
+                    "INSERT INTO transaksi_keluar (item_id, jumlah, keterangan) VALUES (?, ?, ?)",
+                    (item_id, jumlah, keterangan)
+                )
+                conn.commit()
+                st.success("Transaksi berhasil!")
+            else:
+                st.error("Stok tidak mencukupi!")
+
+# === STOK VALIDATION ===
+st.sidebar.header("Stok Darurat")
+df = get_items()
+if not df.empty:
+    st.sidebar.dataframe(df[['nama_barang', 'jumlah_stok']])
+else:
+    st.sidebar.warning("Tidak ada data barang")
