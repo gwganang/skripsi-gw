@@ -14,71 +14,150 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'Get Help': 'https://github.com/organisasi/inventaris',
-        'Report a bug': "https://github.com/organisasi/inventaris/issues",
+        'Get Help': 'https://github.com/username/repo',
+        'Report a bug': "https://github.com/username/repo/issues",
         'About': "Sistem Manajemen Inventaris Profesional v2.0"
     }
 )
 
 # ==================================================================================
-# SISTEM THEME DINAMIS
+# SISTEM STYLING
 # ==================================================================================
-primaryColor = "#007BFF"
-backgroundColor = "#f0f2f6"
-secondaryBackgroundColor = "#ffffff"
-textColor = "#262730"
-font = "sans serif"
-
-st.markdown(f"""
+st.markdown("""
     <style>
-        .stApp {{
-            background-color: {backgroundColor};
-        }}
-        .css-18e3th9 {{
-            padding: 2rem 1rem;
-        }}
-        .block-container {{
+        /* Global Styles */
+        body {
+            font-family: 'Inter', sans-serif;
+            color: #333333;
+        }
+        .block-container {
+            padding: 2rem;
+        }
+        
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #2d4263, #1e3799);
             padding: 2rem;
             border-radius: 15px;
-            background: white;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }}
-        .stButton>button {{
+            margin-bottom: 2rem;
+        }
+        .header h1 {
+            color: white;
+            margin: 0;
+        }
+        
+        /* Navigation */
+        .sidebar .sidebar-content {
+            background: #f8f9fa;
+            border-radius: 15px;
+        }
+        .sidebar .nav-link {
+            padding: 12px 20px;
             border-radius: 8px;
+            transition: all 0.3s;
+        }
+        .sidebar .nav-link.active {
+            background: #1e3799;
+            color: white;
+        }
+        
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-3px);
+        }
+        
+        /* Tables */
+        .dataframe {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+        
+        /* Forms */
+        .stForm {
+            background: #ffffff;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .stButton>button {
+            background: #1e3799;
             border: none;
-            padding: 0.8rem 1.5rem;
-            transition: all 0.3s ease;
-        }}
-        .stButton>button:hover {{
-            transform: translateY(-2px);
-            box-shadow: 0 0 10px rgba(0, 123, 255, 0.3);
-        }}
+            padding: 0.8rem 2rem;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+        }
+        
+        /* Toast Notifications */
+        .stToast {
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
     </style>
 """, unsafe_allow_html=True)
 
 # ==================================================================================
-# KOMPONEN NAVIGASI
+# DATABASE & LOGIC
 # ==================================================================================
-with st.sidebar:
-    st.image("https://via.placeholder.com/150/92c952/FFFFFF?text=📦", width=120)
-    st.write("---")
-    
-    menu = st.radio(
-        "Menu Utama",
-        ["📊 Dashboard", "📦 Data Barang", "🔄 Transaksi", "📄 Laporan", "⚙️ Pengaturan"],
-        format_func=lambda x: x.split()[1],
-        label_visibility="collapsed"
-    )
-    
-    st.write("---")
-    dark_mode = st.toggle("🌙 Dark Mode", key="dark_mode")
+if not os.path.exists('database'):
+    os.makedirs('database')
 
-# ==================================================================================
-# FUNGSI UTAMA
-# ==================================================================================
 @st.cache_resource
 def get_db():
-    return sqlite3.connect('database/inventaris.db', check_same_thread=False)
+    return sqlite3.connect('database/inventaris_pro.db', check_same_thread=False)
+
+def init_db():
+    conn = get_db()
+    c = conn.cursor()
+    
+    # Tabel Barang
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nama TEXT UNIQUE NOT NULL,
+            stok INTEGER NOT NULL CHECK(stok >= 0),
+            satuan TEXT NOT NULL,
+            keterangan TEXT
+        )
+    ''')
+    
+    # Tabel Transaksi
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER,
+            tipe TEXT CHECK(tipe IN ('masuk', 'keluar')) NOT NULL,
+            jumlah INTEGER NOT NULL CHECK(jumlah > 0),
+            tanggal TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            keterangan TEXT,
+            FOREIGN KEY(item_id) REFERENCES items(id)
+        )
+    ''')
+    
+    # Trigger update stok
+    c.execute('''
+        CREATE TRIGGER IF NOT EXISTS update_stok
+        AFTER INSERT ON transactions
+        FOR EACH ROW
+        BEGIN
+            UPDATE items
+            SET stok = stok + (CASE 
+                                WHEN NEW.tipe = 'masuk' THEN NEW.jumlah
+                                WHEN NEW.tipe = 'keluar' THEN -NEW.jumlah
+                               END)
+            WHERE id = NEW.item_id;
+        END;
+    ''')
+    conn.commit()
+
+init_db()
 
 def fetch_items():
     return pd.read_sql("SELECT * FROM items", get_db())
@@ -90,122 +169,167 @@ def fetch_transactions():
         JOIN items i ON t.item_id = i.id
     """, get_db())
 
+def get_item_id_by_name(name):
+    df = pd.read_sql(f"SELECT id FROM items WHERE nama='{name}'", get_db())
+    return df['id'].values[0] if not df.empty else None
+
 # ==================================================================================
-# HALAMAN DASHBOARD
+# KOMPONEN UI/UX
 # ==================================================================================
-if menu == "📊 Dashboard":
-    st.title("Dashboard Inventaris")
-    st.markdown("### Ringkasan Stok Terkini")
+def render_header():
+    st.markdown("""
+        <div class="header">
+            <h1>📦 Inventaris Pro</h1>
+            <p>Solusi Manajemen Stok untuk Bisnis Modern</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+def render_sidebar():
+    with st.sidebar:
+        st.markdown("""
+            <div style="text-align: center; margin: 2rem 0;">
+                <img src="https://via.placeholder.com/150" 
+                     style="border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,0.1);"/>
+                <h3 style="color: #1e3799; margin-top: 1rem;">Menu Utama</h3>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        menu = st.radio("",
+            ["Dashboard", "Data Barang", "Transaksi", "Laporan", "Pengaturan"],
+            format_func=lambda x: "📊 Dashboard" if x == "Dashboard" else 
+                                "📦 Data Barang" if x == "Data Barang" else 
+                                "🔄 Transaksi" if x == "Transaksi" else 
+                                "📄 Laporan" if x == "Laporan" else 
+                                "⚙️ Pengaturan",
+            label_visibility="collapsed"
+        )
+        
+        st.markdown("""
+            <div style="position: fixed; bottom: 20px; width: 230px; text-align: center;">
+                <p style="color: #6c757d;">Dibuat dengan ❤️ oleh Tim Dev</p>
+            </div>
+        """, unsafe_allow_html=True)
+    return menu
+
+# ==================================================================================
+# HALAMAN UTAMA
+# ==================================================================================
+def dashboard_page():
+    render_header()
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     items = fetch_items()
     
     with col1:
-        st.metric(
-            label="Total Barang",
-            value=len(items),
-            delta="+0",
-            delta_color="off"
-        )
-        
+        with st.container(border=True):
+            st.metric("Total Barang", len(items), 
+                     delta="+0", 
+                     delta_color="off",
+                     help="Jumlah total item yang terdaftar")
+            
     with col2:
-        st.metric(
-            label="Total Stok",
-            value=items['stok'].sum(),
-            delta="+0",
-            delta_color="off"
-        )
-        
+        with st.container(border=True):
+            st.metric("Total Stok", items['stok'].sum(),
+                     delta="+0", 
+                     delta_color="off",
+                     help="Jumlah stok keseluruhan")
+            
     with col3:
-        low_stock = len(items[items['stok'] < 10])
-        st.metric(
-            label="Stok Kritis",
-            value=low_stock,
-            delta=f"{low_stock} items",
-            delta_color="inverse"
-        )
-        
-    with col4:
-        transactions = fetch_transactions()
-        last_week = transactions[transactions['tanggal'] > datetime.now() - pd.Timedelta(days=7)]
-        st.metric(
-            label="Transaksi 7 Hari",
-            value=len(last_week),
-            delta="+0",
-            delta_color="off"
-        )
-        
-    # Chart Stok
-    with st.container():
-        st.write("---")
-        st.subheader("Distribusi Stok Barang")
-        
-        if not items.empty:
-            fig = px.bar(
-                items,
-                x='nama',
-                y='stok',
-                color='stok',
-                color_continuous_scale='Bluered_r',
-                labels={'nama':'Barang', 'stok':'Jumlah Stok'},
-                title="Stok Barang"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Tidak ada data barang")
-
-# ==================================================================================
-# HALAMAN DATA BARANG
-# ==================================================================================
-elif menu == "📦 Data Barang":
-    st.title("Manajemen Data Barang")
+        with st.container(border=True):
+            low_stock = len(items[items['stok'] < 10])
+            st.metric("Stok Kritis", low_stock,
+                     delta="+0", 
+                     delta_color="inverse",
+                     help="Item dengan stok < 10")
     
-    tab1, tab2, tab3 = st.tabs(["Daftar Barang", "Tambah Barang", "Edit/Hapus"])
+    # Chart
+    if not items.empty:
+        fig = px.bar(
+            items,
+            x='nama',
+            y='stok',
+            title="Distribusi Stok Barang",
+            labels={'nama':'Barang', 'stok':'Jumlah Stok'},
+            color='stok',
+            color_continuous_scale='Tealgrn'
+        )
+        fig.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12),
+            margin=dict(l=20, r=20, t=30, b=20)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+    # Recent transactions
+    st.subheader("Aktivitas Terakhir")
+    transactions = fetch_transactions().tail(5)
+    if not transactions.empty:
+        st.dataframe(
+            transactions[['tanggal', 'nama', 'tipe', 'jumlah']],
+            column_config={
+                "tanggal": "Waktu",
+                "nama": "Barang",
+                "tipe": st.column_config.TextColumn(
+                    "Tipe",
+                    help="masuk/keluar",
+                    default="N/A"
+                ),
+                "jumlah": st.column_config.NumberColumn(
+                    "Jumlah",
+                    format="%d"
+                )
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+    else:
+        st.info("Belum ada aktivitas")
+
+def barang_page():
+    render_header()
+    
+    tab1, tab2 = st.tabs(["**Daftar Barang**", "**Tambah Barang**"])
     
     with tab1:
         items = fetch_items()
-        if not items.empty:
-            gb = st.data_editor(
-                items,
-                column_config={
-                    "nama": "Nama Barang",
-                    "stok": st.column_config.NumberColumn(
-                        "Stok",
-                        format="%d",
-                        min_value=0
-                    ),
-                    "satuan": "Satuan",
-                    "keterangan": "Keterangan"
-                },
-                use_container_width=True,
-                num_rows="dynamic",
-                disabled=["id"],
-                hide_index=True
-            )
-            
-            if st.button("Simpan Perubahan"):
-                try:
-                    gb.to_sql('items', get_db(), if_exists='replace', index=False)
-                    st.success("Perubahan berhasil disimpan!")
-                except Exception as e:
-                    st.error(f"Gagal menyimpan: {e}")
-        else:
-            st.warning("Tidak ada data barang")
-    
+        gb = st.dataframe(
+            items,
+            column_config={
+                "nama": "Nama Barang",
+                "stok": st.column_config.NumberColumn(
+                    "Stok",
+                    format="%d",
+                    help="Jumlah stok saat ini"
+                ),
+                "satuan": "Satuan",
+                "keterangan": "Keterangan"
+            },
+            use_container_width=True,
+            height=300
+        )
+        
+        # Bulk actions
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.selectbox("Aksi Massal", ["Hapus", "Export"], label_visibility="collapsed")
+        with col2:
+            st.button("Terapkan", use_container_width=True)
+        
     with tab2:
-        with st.form("tambah_barang", clear_on_submit=True):
+        with st.form("tambah_barang", border=True):
             st.subheader("Tambah Barang Baru")
-            col1, col2 = st.columns(2)
             
+            col1, col2 = st.columns(2)
             with col1:
                 nama = st.text_input("Nama Barang*", placeholder="Contoh: Kertas A4")
+            with col2:
                 satuan = st.selectbox("Satuan*", ["pcs", "box", "rim", "lusin"])
                 
-            with col2:
-                stok = st.number_input("Stok Awal*", min_value=0, value=0)
-                keterangan = st.text_area("Keterangan", placeholder="Opsional")
-                
-            submitted = st.form_submit_button("Tambah Barang", type="primary")
+            stok = st.number_input("Stok Awal*", min_value=0, step=1)
+            keterangan = st.text_area("Keterangan", placeholder="Catatan tambahan...")
+            
+            submitted = st.form_submit_button("Simpan", type="primary", use_container_width=True)
             
             if submitted:
                 if nama and stok >= 0 and satuan:
@@ -216,190 +340,118 @@ elif menu == "📦 Data Barang":
                             (nama, stok, satuan, keterangan)
                         )
                         conn.commit()
-                        st.success(f"{nama} berhasil ditambahkan!")
+                        st.toast(f"✅ Barang {nama} berhasil ditambahkan!", icon="🎉")
                     except sqlite3.IntegrityError:
-                        st.error("Nama barang sudah ada!")
+                        st.toast("❌ Nama barang sudah ada!", icon="⚠️")
                 else:
-                    st.warning("Lengkapi field wajib")
+                    st.toast("⚠️ Lengkapi field wajib", icon="❌")
 
-    with tab3:
-        if not items.empty:
-            item_to_edit = st.selectbox("Pilih Barang", items['nama'].tolist())
-            item_data = items[items['nama'] == item_to_edit].iloc[0]
-            
-            with st.form(f"edit_{item_to_edit}"):
-                st.subheader("Edit Barang")
-                new_nama = st.text_input("Nama Barang", value=item_data['nama'])
-                new_stok = st.number_input("Stok", value=item_data['stok'])
-                new_satuan = st.selectbox("Satuan", ["pcs", "box", "rim", "lusin"], index=["pcs", "box", "rim", "lusin"].index(item_data['satuan']))
-                new_keterangan = st.text_area("Keterangan", value=item_data['keterangan'])
-                
-                if st.form_submit_button("Update"):
-                    try:
-                        conn = get_db()
-                        conn.cursor().execute(
-                            "UPDATE items SET nama=?, stok=?, satuan=?, keterangan=? WHERE id=?",
-                            (new_nama, new_stok, new_satuan, new_keterangan, item_data['id'])
-                        )
-                        conn.commit()
-                        st.success("Data berhasil diperbarui!")
-                    except Exception as e:
-                        st.error(f"Gagal: {str(e)}")
-        else:
-            st.info("Tidak ada data untuk diedit")
-
-# ==================================================================================
-# HALAMAN TRANSAKSI
-# ==================================================================================
-elif menu == "🔄 Transaksi":
-    st.title("Manajemen Transaksi")
+def transaksi_page():
+    render_header()
     
-    tab_masuk, tab_keluar, tab_riwayat = st.tabs(["Tambah Masuk", "Tambah Keluar", "Riwayat"])
+    tab_masuk, tab_keluar = st.tabs(["Tambah Masuk", "Tambah Keluar"])
     
     with tab_masuk:
-        with st.form("transaksi_masuk"):
+        with st.form("form_masuk", border=True):
             st.subheader("Tambah Stok Masuk")
-            col1, col2 = st.columns(2)
             
-            with col1:
-                item = st.selectbox("Barang", fetch_items()['nama'].tolist())
-                jumlah = st.number_input("Jumlah", min_value=1, value=1)
-                
-            with col2:
-                tanggal = st.date_input("Tanggal", datetime.now())
-                keterangan = st.text_area("Keterangan", placeholder="Sumber/No. PO")
-                
-            if st.form_submit_button("Proses Masuk", type="primary"):
-                try:
-                    item_id = get_item_id_by_name(item)
-                    conn = get_db()
-                    conn.cursor().execute(
-                        "INSERT INTO transactions (item_id, tipe, jumlah, tanggal, keterangan) VALUES (?, ?, ?, ?, ?)",
-                        (item_id, 'masuk', jumlah, tanggal, keterangan)
-                    )
-                    conn.commit()
-                    st.success(f"Stok {item} berhasil ditambahkan!")
-                except Exception as e:
-                    st.error(f"Gagal: {str(e)}")
-    
-    with tab_keluar:
-        with st.form("transaksi_keluar"):
-            st.subheader("Kurangi Stok Keluar")
-            col1, col2 = st.columns(2)
+            item = st.selectbox("Barang", fetch_items()['nama'].tolist())
+            jumlah = st.number_input("Jumlah*", min_value=1)
+            keterangan = st.text_area("Keterangan")
             
-            with col1:
-                item = st.selectbox("Barang", fetch_items()['nama'].tolist())
-                jumlah = st.number_input("Jumlah", min_value=1, value=1)
-                
-            with col2:
-                tanggal = st.date_input("Tanggal", datetime.now())
-                keterangan = st.text_area("Keterangan", placeholder="Tujuan/No. Surat")
-                
-            if st.form_submit_button("Proses Keluar", type="primary"):
-                item_data = fetch_items()[fetch_items()['nama'] == item].iloc[0]
-                if item_data['stok'] >= jumlah:
+            if st.form_submit_button("Proses Masuk", type="primary", use_container_width=True):
+                if item and jumlah > 0:
                     try:
                         item_id = get_item_id_by_name(item)
                         conn = get_db()
                         conn.cursor().execute(
-                            "INSERT INTO transactions (item_id, tipe, jumlah, tanggal, keterangan) VALUES (?, ?, ?, ?, ?)",
-                            (item_id, 'keluar', jumlah, tanggal, keterangan)
+                            "INSERT INTO transactions (item_id, tipe, jumlah, keterangan) VALUES (?, ?, ?, ?)",
+                            (item_id, 'masuk', jumlah, keterangan)
                         )
                         conn.commit()
-                        st.success(f"Stok {item} berhasil dikurangi!")
+                        st.toast(f"✅ Stok {item} berhasil ditambahkan!", icon="🎉")
                     except Exception as e:
-                        st.error(f"Gagal: {str(e)}")
+                        st.toast(f"❌ Gagal: {str(e)}", icon="⚠️")
                 else:
-                    st.error("Stok tidak mencukupi!")
+                    st.toast("⚠️ Lengkapi data", icon="❌")
+    
+    with tab_keluar:
+        with st.form("form_keluar", border=True):
+            st.subheader("Kurangi Stok Keluar")
+            
+            item = st.selectbox("Barang", fetch_items()['nama'].tolist())
+            jumlah = st.number_input("Jumlah*", min_value=1)
+            keterangan = st.text_area("Keterangan")
+            
+            if st.form_submit_button("Proses Keluar", type="primary", use_container_width=True):
+                item_data = fetch_items()[fetch_items()['nama'] == item]
+                if not item_data.empty and item_data.iloc[0]['stok'] >= jumlah:
+                    try:
+                        item_id = get_item_id_by_name(item)
+                        conn = get_db()
+                        conn.cursor().execute(
+                            "INSERT INTO transactions (item_id, tipe, jumlah, keterangan) VALUES (?, ?, ?, ?)",
+                            (item_id, 'keluar', jumlah, keterangan)
+                        )
+                        conn.commit()
+                        st.toast(f"✅ Stok {item} berhasil dikurangi!", icon="🎉")
+                    except Exception as e:
+                        st.toast(f"❌ Gagal: {str(e)}", icon="⚠️")
+                else:
+                    st.toast("⚠️ Stok tidak mencukupi", icon="❌")
 
-    with tab_riwayat:
-        transactions = fetch_transactions()
-        if not transactions.empty:
-            st.dataframe(
-                transactions,
-                column_config={
-                    "tipe": st.column_config.TextColumn(
-                        "Tipe",
-                        help="Masuk/Keluar",
-                        width="small"
-                    ),
-                    "jumlah": st.column_config.NumberColumn(
-                        "Jumlah",
-                        format="%d"
-                    ),
-                    "tanggal": st.column_config.DateColumn(
-                        "Tanggal"
-                    )
-                },
-                use_container_width=True
-            )
-        else:
-            st.info("Tidak ada riwayat transaksi")
-
-# ==================================================================================
-# HALAMAN LAPORAN
-# ==================================================================================
-elif menu == "📄 Laporan":
-    st.title("Laporan Stok")
+def laporan_page():
+    render_header()
     
     col1, col2 = st.columns(2)
-    start_date = col1.date_input("Dari Tanggal", datetime.now().replace(day=1))
-    end_date = col2.date_input("Sampai Tanggal", datetime.now())
+    start_date = col1.date_input("Tanggal Mulai", datetime.now().replace(day=1))
+    end_date = col2.date_input("Tanggal Akhir", datetime.now())
     
     query = f"""
         SELECT 
+            strftime('%Y-%m', tanggal) AS bulan,
             i.nama,
             SUM(CASE WHEN tipe='masuk' THEN jumlah ELSE 0 END) AS total_masuk,
-            SUM(CASE WHEN tipe='keluar' THEN jumlah ELSE 0 END) AS total_keluar,
-            (SELECT stok FROM items WHERE nama = i.nama) AS stok_akhir
+            SUM(CASE WHEN tipe='keluar' THEN jumlah ELSE 0 END) AS total_keluar
         FROM transactions 
         JOIN items i ON transactions.item_id = i.id
         WHERE tanggal BETWEEN '{start_date}' AND '{end_date}'
-        GROUP BY i.nama
+        GROUP BY bulan, i.nama
     """
-    
     laporan = pd.read_sql(query, get_db())
     
     if not laporan.empty:
         st.dataframe(laporan, use_container_width=True)
-        
-        fig = px.bar(
-            laporan,
-            x='nama',
-            y=['total_masuk', 'total_keluar'],
-            title="Perbandingan Masuk/Keluar",
-            barmode='group',
-            labels={'value':'Jumlah', 'variable':'Tipe Transaksi'}
-        )
+        fig = px.bar(laporan, 
+                    x='bulan', 
+                    y=['total_masuk', 'total_keluar'],
+                    title="Laporan Bulanan",
+                    barmode='group',
+                    labels={'value': 'Jumlah', 'variable': 'Tipe Transaksi'})
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Tidak ada data untuk periode ini")
 
+def pengaturan_page():
+    render_header()
+    st.warning("Fitur pengaturan belum diimplementasikan", icon="⚠️")
+
 # ==================================================================================
-# HALAMAN PENGATURAN
+# MAIN EXECUTION
 # ==================================================================================
-elif menu == "⚙️ Pengaturan":
-    st.title("Pengaturan Sistem")
-    st.warning("Fitur dalam pengembangan", icon="🚧")
+def main():
+    menu = render_sidebar()
     
-    with st.expander("Backup Database"):
-        st.write("Fitur backup otomatis")
-        if st.button("Backup Sekarang"):
-            try:
-                os.system("cp database/inventaris.db database/backup.db")
-                st.success("Backup berhasil!")
-            except Exception as e:
-                st.error(f"Gagal backup: {e}")
+    if menu == "Dashboard":
+        dashboard_page()
+    elif menu == "Data Barang":
+        barang_page()
+    elif menu == "Transaksi":
+        transaksi_page()
+    elif menu == "Laporan":
+        laporan_page()
+    elif menu == "Pengaturan":
+        pengaturan_page()
 
-    with st.expander("Hak Akses"):
-        st.write("Manajemen user (coming soon)")
-
-# ==================================================================================
-# FOOTER
-# ==================================================================================
-st.sidebar.markdown("""
-    <div style="margin-top: 2rem; padding: 1rem; background: #f8f9fa; border-radius: 10px;">
-        <p style="margin:0; text-align: center;">© 2024 Inventaris Pro</p>
-        <p style="margin:0; text-align: center;">Support: support@inventaris.pro</p>
-    </div>
-""", unsafe_allow_html=True)
+if __name__ == "__main__":
+    main()
