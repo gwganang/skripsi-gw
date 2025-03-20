@@ -16,7 +16,7 @@ st.set_page_config(
     menu_items={
         'Get Help': 'https://github.com/username/repo',
         'Report a bug': "https://github.com/username/repo/issues",
-        'About': "Sistem Manajemen Inventaris Profesional v2.0"
+        'About': "Sistem Manajemen Inventaris v2.1"
     }
 )
 
@@ -106,14 +106,17 @@ st.markdown("""
 # ==================================================================================
 # DATABASE & LOGIC
 # ==================================================================================
+# Membuat direktori database jika belum ada
 if not os.path.exists('database'):
     os.makedirs('database')
 
 @st.cache_resource
 def get_db():
-    return sqlite3.connect('database/inventaris_pro.db', check_same_thread=False)
+    """Koneksi ke database SQLite"""
+    return sqlite3.connect('database/database.db', check_same_thread=False)
 
 def init_db():
+    """Inisialisasi struktur database"""
     conn = get_db()
     c = conn.cursor()
     
@@ -141,7 +144,7 @@ def init_db():
         )
     ''')
     
-    # Trigger update stok
+    # Trigger untuk update stok otomatis
     c.execute('''
         CREATE TRIGGER IF NOT EXISTS update_stok
         AFTER INSERT ON transactions
@@ -159,10 +162,15 @@ def init_db():
 
 init_db()
 
+# ==================================================================================
+# FUNGSI UTILITAS
+# ==================================================================================
 def fetch_items():
+    """Mengambil semua data barang"""
     return pd.read_sql("SELECT * FROM items", get_db())
 
 def fetch_transactions():
+    """Mengambil semua transaksi dengan join ke items"""
     return pd.read_sql("""
         SELECT t.*, i.nama 
         FROM transactions t 
@@ -170,6 +178,7 @@ def fetch_transactions():
     """, get_db())
 
 def get_item_id_by_name(name):
+    """Mendapatkan item ID berdasarkan nama"""
     df = pd.read_sql(f"SELECT id FROM items WHERE nama='{name}'", get_db())
     return df['id'].values[0] if not df.empty else None
 
@@ -177,6 +186,7 @@ def get_item_id_by_name(name):
 # KOMPONEN UI/UX
 # ==================================================================================
 def render_header():
+    """Header aplikasi"""
     st.markdown("""
         <div class="header">
             <h1>📦 Inventaris Pro</h1>
@@ -185,6 +195,7 @@ def render_header():
     """, unsafe_allow_html=True)
 
 def render_sidebar():
+    """Sidebar navigasi"""
     with st.sidebar:
         st.markdown("""
             <div style="text-align: center; margin: 2rem 0;">
@@ -215,6 +226,7 @@ def render_sidebar():
 # HALAMAN UTAMA
 # ==================================================================================
 def dashboard_page():
+    """Halaman dashboard"""
     render_header()
     
     col1, col2, col3 = st.columns(3)
@@ -242,7 +254,7 @@ def dashboard_page():
                      delta_color="inverse",
                      help="Item dengan stok < 10")
     
-    # Chart
+    # Visualisasi stok
     if not items.empty:
         fig = px.bar(
             items,
@@ -261,7 +273,7 @@ def dashboard_page():
         )
         st.plotly_chart(fig, use_container_width=True)
         
-    # Recent transactions
+    # Aktivitas terakhir
     st.subheader("Aktivitas Terakhir")
     transactions = fetch_transactions().tail(5)
     if not transactions.empty:
@@ -287,6 +299,7 @@ def dashboard_page():
         st.info("Belum ada aktivitas")
 
 def barang_page():
+    """Halaman manajemen barang"""
     render_header()
     
     tab1, tab2 = st.tabs(["**Daftar Barang**", "**Tambah Barang**"])
@@ -309,7 +322,7 @@ def barang_page():
             height=300
         )
         
-        # Bulk actions
+        # Aksi massal
         col1, col2 = st.columns([1, 4])
         with col1:
             st.selectbox("Aksi Massal", ["Hapus", "Export"], label_visibility="collapsed")
@@ -347,6 +360,7 @@ def barang_page():
                     st.toast("⚠️ Lengkapi field wajib", icon="❌")
 
 def transaksi_page():
+    """Halaman transaksi"""
     render_header()
     
     tab_masuk, tab_keluar = st.tabs(["Tambah Masuk", "Tambah Keluar"])
@@ -401,6 +415,7 @@ def transaksi_page():
                     st.toast("⚠️ Stok tidak mencukupi", icon="❌")
 
 def laporan_page():
+    """Halaman laporan"""
     render_header()
     
     col1, col2 = st.columns(2)
@@ -433,6 +448,7 @@ def laporan_page():
         st.info("Tidak ada data untuk periode ini")
 
 def pengaturan_page():
+    """Halaman pengaturan"""
     render_header()
     st.warning("Fitur pengaturan belum diimplementasikan", icon="⚠️")
 
