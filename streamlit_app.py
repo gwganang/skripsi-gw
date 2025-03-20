@@ -4,15 +4,17 @@ import pandas as pd
 import os
 import logging
 
-# Konfigurasi logging
+# 1. Konfigurasi Halaman (HARUS DI BARIS PERTAMA STREAMLIT)
+st.set_page_config(page_title="Sistem Inventaris ATK", layout="wide")
+
+# 2. Konfigurasi logging
 logging.basicConfig(level=logging.DEBUG)
 
-# === BAGIAN PEMBUATAN DIREKTORI ===
-# Membuat direktori database jika belum ada
+# 3. Membuat direktori database jika belum ada
 if not os.path.exists('database'):
     os.makedirs('database')
 
-# === DATABASE CONNECTION ===
+# 4. Koneksi Database
 @st.cache_resource
 def get_connection():
     try:
@@ -22,7 +24,7 @@ def get_connection():
         logging.error(f"Database Error: {e}")
         raise
 
-# === DATABASE INITIALIZATION ===
+# 5. Inisialisasi Database
 def init_db():
     conn = get_connection()
     c = conn.cursor()
@@ -78,7 +80,7 @@ def init_db():
 
 init_db()
 
-# === FUNGSI CRUD ===
+# 6. Fungsi CRUD
 def get_items():
     try:
         conn = get_connection()
@@ -114,8 +116,7 @@ def get_transaksi_keluar():
         logging.error(f"Error get_transaksi_keluar: {e}")
         return pd.DataFrame()
 
-# === STREAMLIT UI ===
-st.set_page_config(page_title="Sistem Inventaris ATK", layout="wide")
+# 7. Antarmuka Streamlit
 menu = ["Data Barang", "Transaksi Masuk", "Transaksi Keluar"]
 choice = st.sidebar.radio("Menu", menu)
 
