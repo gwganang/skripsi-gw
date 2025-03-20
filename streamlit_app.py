@@ -16,7 +16,7 @@ st.set_page_config(
     menu_items={
         'Get Help': 'https://github.com/username/repo',
         'Report a bug': "https://github.com/username/repo/issues",
-        'About': "Sistem Manajemen Inventaris v2.1"
+        'About': "Sistem Manajemen Inventaris v2.3"
     }
 )
 
@@ -29,11 +29,13 @@ st.markdown("""
         body {
             font-family: 'Inter', sans-serif;
             color: #333333;
+            background-color: #f0f2f6;  /* Warna latar lebih soft */
         }
         .block-container {
             padding: 2rem;
+            background-color: transparent;
         }
-        
+
         /* Header */
         .header {
             background: linear-gradient(135deg, #2d4263, #1e3799);
@@ -45,47 +47,41 @@ st.markdown("""
             color: white;
             margin: 0;
         }
-        
+
         /* Navigation */
         .sidebar .sidebar-content {
             background: #f8f9fa;
             border-radius: 15px;
         }
-        .sidebar .nav-link {
-            padding: 12px 20px;
-            border-radius: 8px;
-            transition: all 0.3s;
-        }
-        .sidebar .nav-link.active {
-            background: #1e3799;
-            color: white;
-        }
-        
+
         /* Cards */
         .card {
-            background: white;
+            background: rgba(255, 255, 255, 0.8);  /* Semi-transparent */
             border-radius: 12px;
             padding: 1.5rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
             transition: transform 0.2s;
         }
         .card:hover {
             transform: translateY(-3px);
         }
-        
+
         /* Tables */
         .dataframe {
             border: 1px solid #dee2e6;
             border-radius: 8px;
+            background: rgba(255, 255, 255, 0.8);  /* Semi-transparent */
         }
-        
+
         /* Forms */
         .stForm {
-            background: #ffffff;
             padding: 2rem;
             border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            background: rgba(255, 255, 255, 0.8);  /* Semi-transparent */
         }
+
+        /* Buttons */
         .stButton>button {
             background: #1e3799;
             border: none;
@@ -94,11 +90,11 @@ st.markdown("""
             color: white;
             font-weight: 500;
         }
-        
+
         /* Toast Notifications */
         .stToast {
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
     </style>
 """, unsafe_allow_html=True)
@@ -119,7 +115,7 @@ def init_db():
     """Inisialisasi struktur database"""
     conn = get_db()
     c = conn.cursor()
-    
+
     # Tabel Barang
     c.execute('''
         CREATE TABLE IF NOT EXISTS items (
@@ -130,7 +126,7 @@ def init_db():
             keterangan TEXT
         )
     ''')
-    
+
     # Tabel Transaksi
     c.execute('''
         CREATE TABLE IF NOT EXISTS transactions (
@@ -143,7 +139,7 @@ def init_db():
             FOREIGN KEY(item_id) REFERENCES items(id)
         )
     ''')
-    
+
     # Trigger untuk update stok otomatis
     c.execute('''
         CREATE TRIGGER IF NOT EXISTS update_stok
@@ -204,7 +200,7 @@ def render_sidebar():
                 <h3 style="color: #1e3799; margin-top: 1rem;">Menu Utama</h3>
             </div>
         """, unsafe_allow_html=True)
-        
+
         menu = st.radio("",
             ["Dashboard", "Data Barang", "Transaksi", "Laporan", "Pengaturan"],
             format_func=lambda x: "📊 Dashboard" if x == "Dashboard" else 
@@ -214,7 +210,7 @@ def render_sidebar():
                                 "⚙️ Pengaturan",
             label_visibility="collapsed"
         )
-        
+
         st.markdown("""
             <div style="position: fixed; bottom: 20px; width: 230px; text-align: center;">
                 <p style="color: #6c757d;">Dibuat dengan ❤️ oleh Tim Dev</p>
@@ -228,32 +224,32 @@ def render_sidebar():
 def dashboard_page():
     """Halaman dashboard"""
     render_header()
-    
+
     col1, col2, col3 = st.columns(3)
     items = fetch_items()
-    
+
     with col1:
-        with st.container(border=True):
+        with st.container(border=True, bg="#ffffff00"):  # Transparan
             st.metric("Total Barang", len(items), 
                      delta="+0", 
                      delta_color="off",
                      help="Jumlah total item yang terdaftar")
-            
+
     with col2:
-        with st.container(border=True):
+        with st.container(border=True, bg="#ffffff00"):  # Transparan
             st.metric("Total Stok", items['stok'].sum(),
                      delta="+0", 
                      delta_color="off",
                      help="Jumlah stok keseluruhan")
-            
+
     with col3:
-        with st.container(border=True):
+        with st.container(border=True, bg="#ffffff00"):  # Transparan
             low_stock = len(items[items['stok'] < 10])
             st.metric("Stok Kritis", low_stock,
                      delta="+0", 
                      delta_color="inverse",
                      help="Item dengan stok < 10")
-    
+
     # Visualisasi stok
     if not items.empty:
         fig = px.bar(
@@ -272,7 +268,7 @@ def dashboard_page():
             margin=dict(l=20, r=20, t=30, b=20)
         )
         st.plotly_chart(fig, use_container_width=True)
-        
+
     # Aktivitas terakhir
     st.subheader("Aktivitas Terakhir")
     transactions = fetch_transactions().tail(5)
@@ -301,9 +297,9 @@ def dashboard_page():
 def barang_page():
     """Halaman manajemen barang"""
     render_header()
-    
+
     tab1, tab2 = st.tabs(["**Daftar Barang**", "**Tambah Barang**"])
-    
+
     with tab1:
         items = fetch_items()
         gb = st.dataframe(
@@ -321,29 +317,29 @@ def barang_page():
             use_container_width=True,
             height=300
         )
-        
+
         # Aksi massal
         col1, col2 = st.columns([1, 4])
         with col1:
             st.selectbox("Aksi Massal", ["Hapus", "Export"], label_visibility="collapsed")
         with col2:
             st.button("Terapkan", use_container_width=True)
-        
+
     with tab2:
         with st.form("tambah_barang", border=True):
             st.subheader("Tambah Barang Baru")
-            
+
             col1, col2 = st.columns(2)
             with col1:
                 nama = st.text_input("Nama Barang*", placeholder="Contoh: Kertas A4")
             with col2:
                 satuan = st.selectbox("Satuan*", ["pcs", "box", "rim", "lusin"])
-                
+
             stok = st.number_input("Stok Awal*", min_value=0, step=1)
             keterangan = st.text_area("Keterangan", placeholder="Catatan tambahan...")
-            
+
             submitted = st.form_submit_button("Simpan", type="primary", use_container_width=True)
-            
+
             if submitted:
                 if nama and stok >= 0 and satuan:
                     try:
@@ -362,17 +358,17 @@ def barang_page():
 def transaksi_page():
     """Halaman transaksi"""
     render_header()
-    
+
     tab_masuk, tab_keluar = st.tabs(["Tambah Masuk", "Tambah Keluar"])
-    
+
     with tab_masuk:
         with st.form("form_masuk", border=True):
             st.subheader("Tambah Stok Masuk")
-            
+
             item = st.selectbox("Barang", fetch_items()['nama'].tolist())
             jumlah = st.number_input("Jumlah*", min_value=1)
             keterangan = st.text_area("Keterangan")
-            
+
             if st.form_submit_button("Proses Masuk", type="primary", use_container_width=True):
                 if item and jumlah > 0:
                     try:
@@ -388,15 +384,15 @@ def transaksi_page():
                         st.toast(f"❌ Gagal: {str(e)}", icon="⚠️")
                 else:
                     st.toast("⚠️ Lengkapi data", icon="❌")
-    
+
     with tab_keluar:
         with st.form("form_keluar", border=True):
             st.subheader("Kurangi Stok Keluar")
-            
+
             item = st.selectbox("Barang", fetch_items()['nama'].tolist())
             jumlah = st.number_input("Jumlah*", min_value=1)
             keterangan = st.text_area("Keterangan")
-            
+
             if st.form_submit_button("Proses Keluar", type="primary", use_container_width=True):
                 item_data = fetch_items()[fetch_items()['nama'] == item]
                 if not item_data.empty and item_data.iloc[0]['stok'] >= jumlah:
@@ -417,11 +413,11 @@ def transaksi_page():
 def laporan_page():
     """Halaman laporan"""
     render_header()
-    
+
     col1, col2 = st.columns(2)
     start_date = col1.date_input("Tanggal Mulai", datetime.now().replace(day=1))
     end_date = col2.date_input("Tanggal Akhir", datetime.now())
-    
+
     query = f"""
         SELECT 
             strftime('%Y-%m', tanggal) AS bulan,
@@ -434,7 +430,7 @@ def laporan_page():
         GROUP BY bulan, i.nama
     """
     laporan = pd.read_sql(query, get_db())
-    
+
     if not laporan.empty:
         st.dataframe(laporan, use_container_width=True)
         fig = px.bar(laporan, 
@@ -457,7 +453,7 @@ def pengaturan_page():
 # ==================================================================================
 def main():
     menu = render_sidebar()
-    
+
     if menu == "Dashboard":
         dashboard_page()
     elif menu == "Data Barang":
