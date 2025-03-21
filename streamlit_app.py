@@ -81,13 +81,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==================================================================================
-# DATABASE & LOGIC
+# DATABASE & LOGIC (Diperbarui ke root)
 # ==================================================================================
 
 
 @st.cache_resource
 def get_db():
-    # Database langsung di root
     return sqlite3.connect('database.db', check_same_thread=False)
 
 
@@ -113,13 +112,13 @@ def init_db():
             item_id INTEGER,
             tipe TEXT CHECK(tipe IN ('masuk', 'keluar')) NOT NULL,
             jumlah INTEGER NOT NULL CHECK(jumlah > 0),
-            tanggal TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            tanggal DATE DEFAULT CURRENT_DATE,
             keterangan TEXT,
             FOREIGN KEY(item_id) REFERENCES items(id)
         )
     ''')
 
-    # Trigger untuk update stok
+    # Trigger dengan validasi stok
     c.execute('''
         CREATE TRIGGER IF NOT EXISTS update_stok
         AFTER INSERT ON transactions
@@ -157,7 +156,8 @@ def fetch_transactions():
 
 
 def get_item_id_by_name(name):
-    df = pd.read_sql(f"SELECT id FROM items WHERE nama='{name}'", get_db())
+    df = pd.read_sql("SELECT id FROM items WHERE nama=?",
+                     get_db(), params=(name,))
     return df['id'].values[0] if not df.empty else None
 
 # ==================================================================================
@@ -239,7 +239,7 @@ def dashboard_page():
         st.metric("Stok Kritis", low_stock)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Chart
+    # Visualisasi
     fig = px.bar(
         items,
         x='nama',
@@ -330,8 +330,7 @@ def barang_page():
                 else:
                     try:
                         conn = get_db()
-                        c = conn.cursor()
-                        c.execute(
+                        conn.cursor().execute(
                             "INSERT INTO items (nama, stok, satuan, keterangan) VALUES (?, ?, ?, ?)",
                             (nama.strip(), stok, satuan,
                              keterangan.strip() if keterangan else None)
@@ -341,10 +340,10 @@ def barang_page():
                     except sqlite3.IntegrityError:
                         st.error("❌ Nama barang sudah ada!")
                     except Exception as e:
-                        st.error(f"❌ Terjadi kesalahan: {str(e)}")
+                        st.error(f"❌ Error: {str(e)}")
 
 # ==================================================================================
-# HALAMAN TRANSAKSI
+# HALAMAN TRANSAKSI (Diperbarui dengan Tanggal)
 # ==================================================================================
 
 
@@ -359,8 +358,7 @@ def transaksi_page():
 
             item = st.selectbox("Barang", fetch_items()['nama'].tolist())
             jumlah = st.number_input("Jumlah*", min_value=1)
-            tanggal = st.date_input(
-                "Tanggal Transaksi*", value=datetime.now())  # Tambahkan ini
+            tanggal = st.date_input("Tanggal", value=datetime.now())
             keterangan = st.text_area("Keterangan")
 
             if st.form_submit_button("Proses Masuk", type="primary", use_container_width=True):
@@ -372,8 +370,8 @@ def transaksi_page():
                         conn = get_db()
                         conn.cursor().execute(
                             "INSERT INTO transactions (item_id, tipe, jumlah, tanggal, keterangan) VALUES (?, ?, ?, ?, ?)",
-                            (item_id, 'masuk', jumlah, tanggal.strftime(
-                                '%Y-%m-%d'), keterangan)  # Format tanggal
+                            (item_id, 'masuk', jumlah,
+                             tanggal.strftime('%Y-%m-%d'), keterangan)
                         )
                         conn.commit()
                         st.success(f"✅ Stok {item} berhasil ditambahkan!")
@@ -386,8 +384,7 @@ def transaksi_page():
 
             item = st.selectbox("Barang", fetch_items()['nama'].tolist())
             jumlah = st.number_input("Jumlah*", min_value=1)
-            tanggal = st.date_input(
-                "Tanggal Transaksi*", value=datetime.now())  # Tambahkan ini
+            tanggal = st.date_input("Tanggal", value=datetime.now())
             keterangan = st.text_area("Keterangan")
 
             if st.form_submit_button("Proses Keluar", type="primary", use_container_width=True):
@@ -402,8 +399,8 @@ def transaksi_page():
                         conn = get_db()
                         conn.cursor().execute(
                             "INSERT INTO transactions (item_id, tipe, jumlah, tanggal, keterangan) VALUES (?, ?, ?, ?, ?)",
-                            (item_id, 'keluar', jumlah, tanggal.strftime(
-                                '%Y-%m-%d'), keterangan)  # Format tanggal
+                            (item_id, 'keluar', jumlah,
+                             tanggal.strftime('%Y-%m-%d'), keterangan)
                         )
                         conn.commit()
                         st.success(f"✅ Stok {item} berhasil dikurangi!")
@@ -411,7 +408,7 @@ def transaksi_page():
                         st.error(f"❌ Gagal: {str(e)}")
 
 # ==================================================================================
-# HALAMAN LAPORAN
+# HALAMAN LAPORAN (Diperbarui dengan Parameterized Query)
 # ==================================================================================
 
 
