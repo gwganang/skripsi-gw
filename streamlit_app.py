@@ -105,14 +105,16 @@ st.markdown("""
 if not os.path.exists('database'):
     os.makedirs('database')
 
+
 @st.cache_resource
 def get_db():
     return sqlite3.connect('database/database.db', check_same_thread=False)
 
+
 def init_db():
     conn = get_db()
     c = conn.cursor()
-    
+
     # Tabel Barang
     c.execute('''
         CREATE TABLE IF NOT EXISTS items (
@@ -123,7 +125,7 @@ def init_db():
             keterangan TEXT
         )
     ''')
-    
+
     # Tabel Transaksi
     c.execute('''
         CREATE TABLE IF NOT EXISTS transactions (
@@ -136,7 +138,7 @@ def init_db():
             FOREIGN KEY(item_id) REFERENCES items(id)
         )
     ''')
-    
+
     # Trigger update stok
     c.execute('''
         CREATE TRIGGER IF NOT EXISTS update_stok
@@ -153,13 +155,17 @@ def init_db():
     ''')
     conn.commit()
 
+
 init_db()
 
 # ==================================================================================
 # FUNGSI UTILITAS
 # ==================================================================================
+
+
 def fetch_items():
     return pd.read_sql("SELECT * FROM items", get_db())
+
 
 def fetch_transactions():
     return pd.read_sql("""
@@ -168,6 +174,7 @@ def fetch_transactions():
         JOIN items i ON t.item_id = i.id
     """, get_db())
 
+
 def get_item_id_by_name(name):
     df = pd.read_sql(f"SELECT id FROM items WHERE nama='{name}'", get_db())
     return df['id'].values[0] if not df.empty else None
@@ -175,6 +182,8 @@ def get_item_id_by_name(name):
 # ==================================================================================
 # KOMPONEN UI/UX
 # ==================================================================================
+
+
 def render_header():
     st.markdown("""
         <div class="header">
@@ -182,6 +191,7 @@ def render_header():
             <p>Solusi Manajemen Stok untuk Bisnis Modern</p>
         </div>
     """, unsafe_allow_html=True)
+
 
 def render_sidebar():
     with st.sidebar:
@@ -192,17 +202,18 @@ def render_sidebar():
                 <h3 style="color: #1e3799; margin-top: 1rem;">Menu Utama</h3>
             </div>
         """, unsafe_allow_html=True)
-        
+
         menu = st.radio("",
-            ["Dashboard", "Data Barang", "Transaksi", "Laporan", "Pengaturan"],
-            format_func=lambda x: "📊 Dashboard" if x == "Dashboard" else 
-                                "📦 Data Barang" if x == "Data Barang" else 
-                                "🔄 Transaksi" if x == "Transaksi" else 
-                                "📄 Laporan" if x == "Laporan" else 
-                                "⚙️ Pengaturan",
-            label_visibility="collapsed"
-        )
-        
+                        ["Dashboard", "Data Barang", "Transaksi",
+                            "Laporan", "Pengaturan"],
+                        format_func=lambda x: "📊 Dashboard" if x == "Dashboard" else
+                        "📦 Data Barang" if x == "Data Barang" else
+                        "🔄 Transaksi" if x == "Transaksi" else
+                        "📄 Laporan" if x == "Laporan" else
+                        "⚙️ Pengaturan",
+                        label_visibility="collapsed"
+                        )
+
         st.markdown("""
             <div style="position: fixed; bottom: 20px; width: 230px; text-align: center;">
                 <p style="color: #6c757d;">Dibuat dengan ❤️ oleh Tim Dev</p>
@@ -213,34 +224,46 @@ def render_sidebar():
 # ==================================================================================
 # HALAMAN UTAMA
 # ==================================================================================
+
+
 def dashboard_page():
     render_header()
-    
+
     col1, col2, col3 = st.columns(3)
     items = fetch_items()
-    
+
     with col1:
-        with st.container(border=True, bg="#ffffff00"):
-            st.metric("Total Barang", len(items), 
-                     delta="+0", 
-                     delta_color="off",
-                     help="Jumlah total item yang terdaftar")
-            
+        # Gunakan st.markdown dengan CSS inline untuk efek container
+        st.markdown("""
+            <div style="background-color: rgba(255, 255, 255, 0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);">
+        """, unsafe_allow_html=True)
+        st.metric("Total Barang", len(items),
+                  delta="+0",
+                  delta_color="off",
+                  help="Jumlah total item yang terdaftar")
+        st.markdown("</div>", unsafe_allow_html=True)
+
     with col2:
-        with st.container(border=True, bg="#ffffff00"):
-            st.metric("Total Stok", items['stok'].sum(),
-                     delta="+0", 
-                     delta_color="off",
-                     help="Jumlah stok keseluruhan")
-            
+        st.markdown("""
+            <div style="background-color: rgba(255, 255, 255, 0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);">
+        """, unsafe_allow_html=True)
+        st.metric("Total Stok", items['stok'].sum(),
+                  delta="+0",
+                  delta_color="off",
+                  help="Jumlah stok keseluruhan")
+        st.markdown("</div>", unsafe_allow_html=True)
+
     with col3:
-        with st.container(border=True, bg="#ffffff00"):
-            low_stock = len(items[items['stok'] < 10])
-            st.metric("Stok Kritis", low_stock,
-                     delta="+0", 
-                     delta_color="inverse",
-                     help="Item dengan stok < 10")
-    
+        st.markdown("""
+            <div style="background-color: rgba(255, 255, 255, 0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);">
+        """, unsafe_allow_html=True)
+        low_stock = len(items[items['stok'] < 10])
+        st.metric("Stok Kritis", low_stock,
+                  delta="+0",
+                  delta_color="inverse",
+                  help="Item dengan stok < 10")
+        st.markdown("</div>", unsafe_allow_html=True)
+
     # Chart
     if not items.empty:
         fig = px.bar(
@@ -248,7 +271,7 @@ def dashboard_page():
             x='nama',
             y='stok',
             title="Distribusi Stok Barang",
-            labels={'nama':'Barang', 'stok':'Jumlah Stok'},
+            labels={'nama': 'Barang', 'stok': 'Jumlah Stok'},
             color='stok',
             color_continuous_scale='Tealgrn'
         )
@@ -259,7 +282,7 @@ def dashboard_page():
             margin=dict(l=20, r=20, t=30, b=20)
         )
         st.plotly_chart(fig, use_container_width=True)
-        
+
     # Aktivitas terakhir
     st.subheader("Aktivitas Terakhir")
     transactions = fetch_transactions().tail(5)
@@ -285,11 +308,12 @@ def dashboard_page():
     else:
         st.info("Belum ada aktivitas")
 
+
 def barang_page():
     render_header()
-    
+
     tab1, tab2 = st.tabs(["**Daftar Barang**", "**Tambah Barang**"])
-    
+
     with tab1:
         items = fetch_items()
         st.dataframe(
@@ -307,29 +331,34 @@ def barang_page():
             use_container_width=True,
             height=300
         )
-        
+
         # Aksi massal
         col1, col2 = st.columns([1, 4])
         with col1:
-            st.selectbox("Aksi Massal", ["Hapus", "Export"], label_visibility="collapsed")
+            st.selectbox("Aksi Massal", [
+                         "Hapus", "Export"], label_visibility="collapsed")
         with col2:
             st.button("Terapkan", use_container_width=True)
-        
+
     with tab2:
         with st.form("tambah_barang", border=True):
             st.subheader("Tambah Barang Baru")
-            
+
             col1, col2 = st.columns(2)
             with col1:
-                nama = st.text_input("Nama Barang*", placeholder="Contoh: Kertas A4")
+                nama = st.text_input(
+                    "Nama Barang*", placeholder="Contoh: Kertas A4")
             with col2:
-                satuan = st.selectbox("Satuan*", ["pcs", "box", "rim", "lusin"])
-                
+                satuan = st.selectbox(
+                    "Satuan*", ["pcs", "box", "rim", "lusin"])
+
             stok = st.number_input("Stok Awal*", min_value=0, step=1)
-            keterangan = st.text_area("Keterangan", placeholder="Catatan tambahan...")
-            
-            submitted = st.form_submit_button("Simpan", type="primary", use_container_width=True)
-            
+            keterangan = st.text_area(
+                "Keterangan", placeholder="Catatan tambahan...")
+
+            submitted = st.form_submit_button(
+                "Simpan", type="primary", use_container_width=True)
+
             if submitted:
                 if nama and stok >= 0 and satuan:
                     try:
@@ -339,25 +368,27 @@ def barang_page():
                             (nama, stok, satuan, keterangan)
                         )
                         conn.commit()
-                        st.toast(f"✅ Barang {nama} berhasil ditambahkan!", icon="🎉")
+                        st.toast(
+                            f"✅ Barang {nama} berhasil ditambahkan!", icon="🎉")
                     except sqlite3.IntegrityError:
                         st.toast("❌ Nama barang sudah ada!", icon="⚠️")
                 else:
                     st.toast("⚠️ Lengkapi field wajib", icon="❌")
 
+
 def transaksi_page():
     render_header()
-    
+
     tab_masuk, tab_keluar = st.tabs(["Tambah Masuk", "Tambah Keluar"])
-    
+
     with tab_masuk:
         with st.form("form_masuk", border=True):
             st.subheader("Tambah Stok Masuk")
-            
+
             item = st.selectbox("Barang", fetch_items()['nama'].tolist())
             jumlah = st.number_input("Jumlah*", min_value=1)
             keterangan = st.text_area("Keterangan")
-            
+
             if st.form_submit_button("Proses Masuk", type="primary", use_container_width=True):
                 if item and jumlah > 0:
                     try:
@@ -368,20 +399,21 @@ def transaksi_page():
                             (item_id, 'masuk', jumlah, keterangan)
                         )
                         conn.commit()
-                        st.toast(f"✅ Stok {item} berhasil ditambahkan!", icon="🎉")
+                        st.toast(
+                            f"✅ Stok {item} berhasil ditambahkan!", icon="🎉")
                     except Exception as e:
                         st.toast(f"❌ Gagal: {str(e)}", icon="⚠️")
                 else:
                     st.toast("⚠️ Lengkapi data", icon="❌")
-    
+
     with tab_keluar:
         with st.form("form_keluar", border=True):
             st.subheader("Kurangi Stok Keluar")
-            
+
             item = st.selectbox("Barang", fetch_items()['nama'].tolist())
             jumlah = st.number_input("Jumlah*", min_value=1)
             keterangan = st.text_area("Keterangan")
-            
+
             if st.form_submit_button("Proses Keluar", type="primary", use_container_width=True):
                 item_data = fetch_items()[fetch_items()['nama'] == item]
                 if not item_data.empty and item_data.iloc[0]['stok'] >= jumlah:
@@ -393,19 +425,22 @@ def transaksi_page():
                             (item_id, 'keluar', jumlah, keterangan)
                         )
                         conn.commit()
-                        st.toast(f"✅ Stok {item} berhasil dikurangi!", icon="🎉")
+                        st.toast(
+                            f"✅ Stok {item} berhasil dikurangi!", icon="🎉")
                     except Exception as e:
                         st.toast(f"❌ Gagal: {str(e)}", icon="⚠️")
                 else:
                     st.toast("⚠️ Stok tidak mencukupi", icon="❌")
 
+
 def laporan_page():
     render_header()
-    
+
     col1, col2 = st.columns(2)
-    start_date = col1.date_input("Tanggal Mulai", datetime.now().replace(day=1))
+    start_date = col1.date_input(
+        "Tanggal Mulai", datetime.now().replace(day=1))
     end_date = col2.date_input("Tanggal Akhir", datetime.now())
-    
+
     query = f"""
         SELECT 
             strftime('%Y-%m', tanggal) AS bulan,
@@ -418,18 +453,19 @@ def laporan_page():
         GROUP BY bulan, i.nama
     """
     laporan = pd.read_sql(query, get_db())
-    
+
     if not laporan.empty:
         st.dataframe(laporan, use_container_width=True)
-        fig = px.bar(laporan, 
-                    x='bulan', 
-                    y=['total_masuk', 'total_keluar'],
-                    title="Laporan Bulanan",
-                    barmode='group',
-                    labels={'value': 'Jumlah', 'variable': 'Tipe Transaksi'})
+        fig = px.bar(laporan,
+                     x='bulan',
+                     y=['total_masuk', 'total_keluar'],
+                     title="Laporan Bulanan",
+                     barmode='group',
+                     labels={'value': 'Jumlah', 'variable': 'Tipe Transaksi'})
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Tidak ada data untuk periode ini")
+
 
 def pengaturan_page():
     render_header()
@@ -438,9 +474,11 @@ def pengaturan_page():
 # ==================================================================================
 # MAIN EXECUTION
 # ==================================================================================
+
+
 def main():
     menu = render_sidebar()
-    
+
     if menu == "Dashboard":
         dashboard_page()
     elif menu == "Data Barang":
@@ -451,6 +489,7 @@ def main():
         laporan_page()
     elif menu == "Pengaturan":
         pengaturan_page()
+
 
 if __name__ == "__main__":
     main()
