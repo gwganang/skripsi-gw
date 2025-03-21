@@ -121,7 +121,7 @@ def init_db():
         END;
     ''')
 
-    # Sample superadmin jika belum ada
+    # Inisialisasi superadmin jika belum ada
     c.execute("SELECT * FROM users WHERE username='superadmin'")
     if not c.fetchone():
         password_hash = sha256("superadmin123".encode()).hexdigest()
