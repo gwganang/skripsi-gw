@@ -3,6 +3,7 @@ import sqlite3
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+from hashlib import sha256
 
 # ==================================================================================
 # KONFIGURASI AWAL
@@ -11,12 +12,7 @@ st.set_page_config(
     page_title="Inventaris Pro",
     page_icon="📦",
     layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': 'https://github.com/username/repo',
-        'Report a bug': "https://github.com/username/repo/issues",
-        'About': "Sistem Manajemen Inventaris v2.4"
-    }
+    initial_sidebar_state="collapsed"
 )
 
 # ==================================================================================
@@ -26,12 +22,15 @@ st.markdown("""
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            color: #333333;
             background-color: #f0f2f6;
         }
-        .block-container {
+        .login-container {
+            max-width: 400px;
+            margin: 15% auto;
             padding: 2rem;
-            background-color: transparent;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
         .header {
             background: linear-gradient(135deg, #2d4263, #1e3799);
@@ -39,49 +38,21 @@ st.markdown("""
             border-radius: 15px;
             margin-bottom: 2rem;
         }
-        .header h1 {
-            color: white;
-            margin: 0;
-        }
         .sidebar .sidebar-content {
             background: #f8f9fa;
             border-radius: 15px;
         }
-        .card {
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            transition: transform 0.2s;
-        }
-        .card:hover {
-            transform: translateY(-3px);
-        }
-        .dataframe {
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-        }
-        .stForm {
-            padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        }
         .stButton>button {
             background: #1e3799;
-            border: none;
-            padding: 0.8rem 2rem;
-            border-radius: 8px;
             color: white;
-            font-weight: 500;
-        }
-        .stToast {
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 0.8rem 2rem;
         }
     </style>
 """, unsafe_allow_html=True)
 
 # ==================================================================================
-# DATABASE & LOGIC (Diperbarui ke root)
+# DATABASE & LOGIC
 # ==================================================================================
 
 
@@ -94,13 +65,23 @@ def init_db():
     conn = get_db()
     c = conn.cursor()
 
-    # Tabel Barang
+    # Tabel Users
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT CHECK(role IN ('superadmin', 'admin', 'user')) NOT NULL DEFAULT 'user'
+        )
+    ''')
+
+    # Tabel Items
     c.execute('''
         CREATE TABLE IF NOT EXISTS items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nama TEXT UNIQUE NOT NULL,
             stok INTEGER NOT NULL CHECK(stok >= 0),
-            satuan TEXT NOT NULL CHECK(satuan IN ('pcs', 'box', 'rim', 'lusin')),
+            satuan TEXT NOT NULL,
             keterangan TEXT
         )
     ''')
@@ -118,7 +99,7 @@ def init_db():
         )
     ''')
 
-    # Trigger dengan validasi stok
+    # Trigger Stok
     c.execute('''
         CREATE TRIGGER IF NOT EXISTS update_stok
         AFTER INSERT ON transactions
@@ -133,354 +114,262 @@ def init_db():
             WHERE id = NEW.item_id;
         END;
     ''')
-    conn.commit()
+
+    # Sample admin jika belum ada
+    c.execute("SELECT * FROM users WHERE username='superadmin'")
+    if not c.fetchone():
+        password_hash = sha256("superadmin123".encode()).hexdigest()
+        c.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                  ("superadmin", password_hash, "superadmin"))
+        conn.commit()
+
+    conn.close()
 
 
 init_db()
 
 # ==================================================================================
-# FUNGSI UTILITAS
+# SISTEM AUTHENTIKASI
 # ==================================================================================
 
 
-def fetch_items():
-    return pd.read_sql("SELECT * FROM items", get_db())
+def hash_password(password):
+    return sha256(password.encode()).hexdigest()
 
 
-def fetch_transactions():
-    return pd.read_sql("""
-        SELECT t.*, i.nama 
-        FROM transactions t 
-        JOIN items i ON t.item_id = i.id
-    """, get_db())
-
-
-def get_item_id_by_name(name):
-    df = pd.read_sql("SELECT id FROM items WHERE nama=?",
-                     get_db(), params=(name,))
-    return df['id'].values[0] if not df.empty else None
+def verify_login(username, password):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT role FROM users WHERE username=? AND password_hash=?",
+              (username, hash_password(password)))
+    result = c.fetchone()
+    conn.close()
+    return result[0] if result else None
 
 # ==================================================================================
-# KOMPONEN UI/UX
+# HALAMAN LOGIN
 # ==================================================================================
 
 
-def render_header():
-    st.markdown("""
-        <div class="header">
-            <h1>📦 Inventaris Pro</h1>
-            <p>Solusi Manajemen Stok untuk Bisnis Modern</p>
-        </div>
-    """, unsafe_allow_html=True)
+def login_page():
+    st.markdown('<div class="login-container">', unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>🔐 Login</h2>",
+                unsafe_allow_html=True)
 
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
 
-def render_sidebar():
-    with st.sidebar:
-        st.markdown("""
-            <div style="text-align: center; margin: 2rem 0;">
-                <img src="https://via.placeholder.com/150" 
-                     style="border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,0.1);"/>
-                <h3 style="color: #1e3799; margin-top: 1rem;">Menu Utama</h3>
-            </div>
-        """, unsafe_allow_html=True)
-
-        menu = st.radio("",
-                        ["Dashboard", "Data Barang", "Transaksi",
-                            "Laporan", "Pengaturan"],
-                        format_func=lambda x: "📊 Dashboard" if x == "Dashboard" else
-                        "📦 Data Barang" if x == "Data Barang" else
-                        "🔄 Transaksi" if x == "Transaksi" else
-                        "📄 Laporan" if x == "Laporan" else
-                        "⚙️ Pengaturan",
-                        label_visibility="collapsed"
-                        )
-
-        st.markdown("""
-            <div style="position: fixed; bottom: 20px; width: 230px; text-align: center;">
-                <p style="color: #6c757d;">Dibuat dengan ❤️ oleh Tim Dev</p>
-            </div>
-        """, unsafe_allow_html=True)
-    return menu
+        if submitted:
+            role = verify_login(username, password)
+            if role:
+                st.session_state.authenticated = True
+                st.session_state.role = role
+                st.session_state.username = username
+                st.experimental_rerun()
+            else:
+                st.error("Username/password salah!")
 
 # ==================================================================================
-# HALAMAN UTAMA
-# ==================================================================================
-
-
-def dashboard_page():
-    render_header()
-
-    items = fetch_items()
-    if items.empty:
-        st.warning("Tidak ada data barang")
-        return
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.markdown("""
-            <div class="card" style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px;">
-        """, unsafe_allow_html=True)
-        st.metric("Total Barang", len(items))
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with col2:
-        st.markdown("""
-            <div class="card" style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px;">
-        """, unsafe_allow_html=True)
-        st.metric("Total Stok", items['stok'].sum())
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with col3:
-        st.markdown("""
-            <div class="card" style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px;">
-        """, unsafe_allow_html=True)
-        low_stock = len(items[items['stok'] < 10])
-        st.metric("Stok Kritis", low_stock)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    # Visualisasi
-    fig = px.bar(
-        items,
-        x='nama',
-        y='stok',
-        title="Distribusi Stok Barang",
-        labels={'nama': 'Barang', 'stok': 'Jumlah Stok'},
-        color='stok',
-        color_continuous_scale='Tealgrn'
-    )
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=20, r=20, t=30, b=20)
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Aktivitas terakhir
-    st.subheader("Aktivitas Terakhir")
-    transactions = fetch_transactions().tail(5)
-    if not transactions.empty:
-        st.dataframe(
-            transactions[['tanggal', 'nama', 'tipe', 'jumlah']],
-            column_config={
-                "tanggal": "Waktu",
-                "nama": "Barang",
-                "tipe": "Tipe",
-                "jumlah": st.column_config.NumberColumn("Jumlah", format="%d")
-            },
-            hide_index=True,
-            use_container_width=True
-        )
-    else:
-        st.info("Belum ada aktivitas")
-
-# ==================================================================================
-# HALAMAN DATA BARANG
-# ==================================================================================
-
-
-def barang_page():
-    render_header()
-
-    tab1, tab2 = st.tabs(["**Daftar Barang**", "**Tambah Barang**"])
-
-    with tab1:
-        items = fetch_items()
-        if items.empty:
-            st.warning("Tidak ada data barang")
-        else:
-            st.dataframe(
-                items,
-                column_config={
-                    "nama": "Nama Barang",
-                    "stok": st.column_config.NumberColumn("Stok", format="%d"),
-                    "satuan": "Satuan",
-                    "keterangan": "Keterangan"
-                },
-                use_container_width=True,
-                height=300
-            )
-
-    with tab2:
-        with st.form("tambah_barang", border=True):
-            st.subheader("Tambah Barang Baru")
-
-            col1, col2 = st.columns(2)
-            with col1:
-                nama = st.text_input(
-                    "Nama Barang*", placeholder="Contoh: Kertas A4")
-            with col2:
-                satuan = st.selectbox(
-                    "Satuan*", ["pcs", "box", "rim", "lusin"])
-
-            stok = st.number_input("Stok Awal*", min_value=0, step=1)
-            keterangan = st.text_area(
-                "Keterangan", placeholder="Catatan tambahan...")
-
-            submitted = st.form_submit_button(
-                "Simpan", type="primary", use_container_width=True)
-
-            if submitted:
-                if not nama:
-                    st.error("⚠️ Nama barang wajib diisi!")
-                elif stok < 0:
-                    st.error("⚠️ Stok tidak boleh negatif!")
-                elif satuan not in ["pcs", "box", "rim", "lusin"]:
-                    st.error("⚠️ Satuan tidak valid!")
-                else:
-                    try:
-                        conn = get_db()
-                        conn.cursor().execute(
-                            "INSERT INTO items (nama, stok, satuan, keterangan) VALUES (?, ?, ?, ?)",
-                            (nama.strip(), stok, satuan,
-                             keterangan.strip() if keterangan else None)
-                        )
-                        conn.commit()
-                        st.success(f"✅ Barang {nama} berhasil ditambahkan!")
-                    except sqlite3.IntegrityError:
-                        st.error("❌ Nama barang sudah ada!")
-                    except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
-
-# ==================================================================================
-# HALAMAN TRANSAKSI (Diperbarui dengan Tanggal)
-# ==================================================================================
-
-
-def transaksi_page():
-    render_header()
-
-    tab_masuk, tab_keluar = st.tabs(["Tambah Masuk", "Tambah Keluar"])
-
-    with tab_masuk:
-        with st.form("form_masuk", border=True):
-            st.subheader("Tambah Stok Masuk")
-
-            item = st.selectbox("Barang", fetch_items()['nama'].tolist())
-            jumlah = st.number_input("Jumlah*", min_value=1)
-            tanggal = st.date_input("Tanggal", value=datetime.now())
-            keterangan = st.text_area("Keterangan")
-
-            if st.form_submit_button("Proses Masuk", type="primary", use_container_width=True):
-                if not item or jumlah <= 0:
-                    st.error("⚠️ Lengkapi data!")
-                else:
-                    try:
-                        item_id = get_item_id_by_name(item)
-                        conn = get_db()
-                        conn.cursor().execute(
-                            "INSERT INTO transactions (item_id, tipe, jumlah, tanggal, keterangan) VALUES (?, ?, ?, ?, ?)",
-                            (item_id, 'masuk', jumlah,
-                             tanggal.strftime('%Y-%m-%d'), keterangan)
-                        )
-                        conn.commit()
-                        st.success(f"✅ Stok {item} berhasil ditambahkan!")
-                    except Exception as e:
-                        st.error(f"❌ Gagal: {str(e)}")
-
-    with tab_keluar:
-        with st.form("form_keluar", border=True):
-            st.subheader("Kurangi Stok Keluar")
-
-            item = st.selectbox("Barang", fetch_items()['nama'].tolist())
-            jumlah = st.number_input("Jumlah*", min_value=1)
-            tanggal = st.date_input("Tanggal", value=datetime.now())
-            keterangan = st.text_area("Keterangan")
-
-            if st.form_submit_button("Proses Keluar", type="primary", use_container_width=True):
-                item_data = fetch_items()[fetch_items()['nama'] == item]
-                if item_data.empty:
-                    st.error("⚠️ Barang tidak ditemukan!")
-                elif item_data.iloc[0]['stok'] < jumlah:
-                    st.error("⚠️ Stok tidak mencukupi!")
-                else:
-                    try:
-                        item_id = get_item_id_by_name(item)
-                        conn = get_db()
-                        conn.cursor().execute(
-                            "INSERT INTO transactions (item_id, tipe, jumlah, tanggal, keterangan) VALUES (?, ?, ?, ?, ?)",
-                            (item_id, 'keluar', jumlah,
-                             tanggal.strftime('%Y-%m-%d'), keterangan)
-                        )
-                        conn.commit()
-                        st.success(f"✅ Stok {item} berhasil dikurangi!")
-                    except Exception as e:
-                        st.error(f"❌ Gagal: {str(e)}")
-
-# ==================================================================================
-# HALAMAN LAPORAN (Diperbarui dengan Parameterized Query)
-# ==================================================================================
-
-
-def laporan_page():
-    render_header()
-
-    items = fetch_items()
-    if items.empty:
-        st.warning("Tidak ada data barang")
-        return
-
-    col1, col2 = st.columns(2)
-    start_date = col1.date_input(
-        "Tanggal Mulai", datetime.now().replace(day=1))
-    end_date = col2.date_input("Tanggal Akhir", datetime.now())
-
-    query = """
-        SELECT 
-            strftime('%Y-%m', tanggal) AS bulan,
-            i.nama,
-            SUM(CASE WHEN tipe='masuk' THEN jumlah ELSE 0 END) AS total_masuk,
-            SUM(CASE WHEN tipe='keluar' THEN jumlah ELSE 0 END) AS total_keluar
-        FROM transactions 
-        JOIN items i ON transactions.item_id = i.id
-        WHERE tanggal BETWEEN ? AND ?
-        GROUP BY bulan, i.nama
-    """
-
-    laporan = pd.read_sql(query, get_db(), params=(start_date, end_date))
-
-    if not laporan.empty:
-        st.dataframe(laporan, use_container_width=True)
-        fig = px.bar(
-            laporan,
-            x='bulan',
-            y=['total_masuk', 'total_keluar'],
-            title="Laporan Bulanan",
-            barmode='group',
-            labels={'value': 'Jumlah', 'variable': 'Tipe Transaksi'}
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Tidak ada data untuk periode ini")
-
-# ==================================================================================
-# HALAMAN PENGATURAN
+# HALAMAN PENGATURAN (CRUD User)
 # ==================================================================================
 
 
 def pengaturan_page():
     render_header()
-    st.warning("Fitur pengaturan belum diimplementasikan", icon="⚠️")
+
+    if st.session_state.role == "superadmin":
+        tab1, tab2 = st.tabs(["Ubah Password", "Manajemen User"])
+
+        # Tab Ubah Password
+        with tab1:
+            with st.form("ubah_password"):
+                st.subheader("Ubah Password")
+                password_lama = st.text_input("Password Lama", type="password")
+                password_baru = st.text_input("Password Baru", type="password")
+                konfirmasi_password = st.text_input(
+                    "Konfirmasi Password", type="password")
+
+                if st.form_submit_button("Simpan", type="primary"):
+                    if not password_lama or not password_baru or not konfirmasi_password:
+                        st.error("Lengkapi semua field!")
+                    elif password_baru != konfirmasi_password:
+                        st.error("Password baru tidak cocok!")
+                    else:
+                        conn = get_db()
+                        c = conn.cursor()
+                        c.execute("SELECT password_hash FROM users WHERE username=?",
+                                  (st.session_state.username,))
+                        current_hash = c.fetchone()[0]
+
+                        if hash_password(password_lama) == current_hash:
+                            new_hash = hash_password(password_baru)
+                            c.execute("UPDATE users SET password_hash=? WHERE username=?",
+                                      (new_hash, st.session_state.username))
+                            conn.commit()
+                            st.success("Password berhasil diubah!")
+                        else:
+                            st.error("Password lama salah!")
+                        conn.close()
+
+        # Tab Manajemen User (Superadmin only)
+        with tab2:
+            st.subheader("Manajemen User")
+            users = pd.read_sql("SELECT username, role FROM users", get_db())
+            st.dataframe(users, use_container_width=True)
+
+            with st.expander("Tambah/Edit User"):
+                with st.form("user_form"):
+                    username = st.text_input("Username*")
+                    password = st.text_input("Password*", type="password")
+                    role = st.selectbox("Role*", ["admin", "user"])
+                    submit_type = st.radio(
+                        "Tipe", ["Tambah", "Edit"], horizontal=True)
+
+                    if st.form_submit_button("Proses"):
+                        if not username or not password:
+                            st.error("Data tidak lengkap!")
+                        else:
+                            conn = get_db()
+                            c = conn.cursor()
+                            if submit_type == "Tambah":
+                                try:
+                                    c.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                                              (username, hash_password(password), role))
+                                    conn.commit()
+                                    st.success(
+                                        f"User {username} berhasil ditambahkan!")
+                                except sqlite3.IntegrityError:
+                                    st.error("Username sudah ada!")
+                            else:
+                                c.execute("UPDATE users SET password_hash=?, role=? WHERE username=?",
+                                          (hash_password(password), role, username))
+                                conn.commit()
+                                st.success(
+                                    f"User {username} berhasil diupdate!")
+                            conn.close()
+
+            with st.expander("Hapus User"):
+                hapus_username = st.selectbox("Pilih User",
+                                              pd.read_sql("SELECT username FROM users", get_db())['username'].tolist())
+                if st.button("Hapus", type="primary"):
+                    conn = get_db()
+                    c = conn.cursor()
+                    c.execute("DELETE FROM users WHERE username=?",
+                              (hapus_username,))
+                    conn.commit()
+                    st.success(f"User {hapus_username} berhasil dihapus!")
+                    conn.close()
+
+    elif st.session_state.role in ["admin", "user"]:
+        with st.form("ubah_password"):
+            st.subheader("Ubah Password")
+            password_lama = st.text_input("Password Lama", type="password")
+            password_baru = st.text_input("Password Baru", type="password")
+            konfirmasi_password = st.text_input(
+                "Konfirmasi Password", type="password")
+
+            if st.form_submit_button("Simpan", type="primary"):
+                if not password_lama or not password_baru or not konfirmasi_password:
+                    st.error("Lengkapi semua field!")
+                elif password_baru != konfirmasi_password:
+                    st.error("Password baru tidak cocok!")
+                else:
+                    conn = get_db()
+                    c = conn.cursor()
+                    c.execute("SELECT password_hash FROM users WHERE username=?",
+                              (st.session_state.username,))
+                    current_hash = c.fetchone()[0]
+
+                    if hash_password(password_lama) == current_hash:
+                        new_hash = hash_password(password_baru)
+                        c.execute("UPDATE users SET password_hash=? WHERE username=?",
+                                  (new_hash, st.session_state.username))
+                        conn.commit()
+                        st.success("Password berhasil diubah!")
+                    else:
+                        st.error("Password lama salah!")
+                    conn.close()
+    else:
+        st.error("Akses ditolak!")
+
+# ==================================================================================
+# PROTEKSI HALAMAN
+# ==================================================================================
+
+
+def check_access(required_role):
+    if 'authenticated' not in st.session_state or not st.session_state.authenticated:
+        st.error("Anda harus login!")
+        st.stop()
+    if st.session_state.role not in required_role:
+        st.error("Anda tidak memiliki akses ke halaman ini!")
+        st.stop()
+
+# ==================================================================================
+# HALAMAN UTAMA (SISANYA SAMA DENGAN KODE SEBELUMNYA)
+# ==================================================================================
+# ... (kode untuk dashboard_page, barang_page, transaksi_page, laporan_page)
+
+# ==================================================================================
+# RENDER SIDEBAR DENGAN PROTEKSI ROLE
+# ==================================================================================
+
+
+def render_sidebar():
+    with st.sidebar:
+        st.markdown(f"""
+            <div style="text-align: center; margin: 2rem 0;">
+                <h3 style="color: #1e3799;">Selamat Datang, <br>{st.session_state.username}</h3>
+            </div>
+        """, unsafe_allow_html=True)
+
+        if st.session_state.role == "superadmin":
+            menu = ["Dashboard", "Data Barang",
+                    "Transaksi", "Laporan", "Pengaturan"]
+        elif st.session_state.role == "admin":
+            menu = ["Dashboard", "Data Barang", "Transaksi", "Laporan"]
+        else:
+            menu = ["Dashboard", "Laporan"]
+
+        return st.radio("Menu", menu,
+                        format_func=lambda x: "📊 Dashboard" if x == "Dashboard" else
+                        "📦 Data Barang" if x == "Data Barang" else
+                        "🔄 Transaksi" if x == "Transaksi" else
+                        "📄 Laporan" if x == "Laporan" else
+                        "⚙️ Pengaturan")
+
 
 # ==================================================================================
 # MAIN EXECUTION
 # ==================================================================================
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
 
-
-def main():
+if not st.session_state.authenticated:
+    login_page()
+else:
     menu = render_sidebar()
 
     if menu == "Dashboard":
+        check_access(["superadmin", "admin", "user"])
         dashboard_page()
     elif menu == "Data Barang":
+        check_access(["superadmin", "admin"])
         barang_page()
     elif menu == "Transaksi":
+        check_access(["superadmin", "admin"])
         transaksi_page()
     elif menu == "Laporan":
+        check_access(["superadmin", "admin", "user"])
         laporan_page()
     elif menu == "Pengaturan":
+        check_access(["superadmin"])
         pengaturan_page()
 
-
-if __name__ == "__main__":
-    main()
+    # Tambahkan tombol logout di sidebar
+    st.sidebar.markdown("---")
+    if st.sidebar.button("Logout", use_container_width=True):
+        st.session_state.clear()
+        st.experimental_rerun()
