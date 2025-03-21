@@ -16,7 +16,7 @@ st.set_page_config(
     menu_items={
         'Get Help': 'https://github.com/username/repo',
         'Report a bug': "https://github.com/username/repo/issues",
-        'About': "Sistem Manajemen Inventaris v2.4"
+        'About': "Sistem Manajemen Inventaris v2.3"
     }
 )
 
@@ -25,15 +25,18 @@ st.set_page_config(
 # ==================================================================================
 st.markdown("""
     <style>
+        /* Global Styles */
         body {
             font-family: 'Inter', sans-serif;
             color: #333333;
-            background-color: #f0f2f6;
+            background-color: #f0f2f6;  /* Warna latar lebih soft */
         }
         .block-container {
             padding: 2rem;
             background-color: transparent;
         }
+
+        /* Header */
         .header {
             background: linear-gradient(135deg, #2d4263, #1e3799);
             padding: 2rem;
@@ -44,11 +47,16 @@ st.markdown("""
             color: white;
             margin: 0;
         }
+
+        /* Sidebar */
         .sidebar .sidebar-content {
             background: #f8f9fa;
             border-radius: 15px;
         }
+
+        /* Cards */
         .card {
+
             border-radius: 12px;
             padding: 1.5rem;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
@@ -57,15 +65,23 @@ st.markdown("""
         .card:hover {
             transform: translateY(-3px);
         }
+
+        /* Tables */
         .dataframe {
             border: 1px solid #dee2e6;
             border-radius: 8px;
+
         }
+
+        /* Forms */
         .stForm {
             padding: 2rem;
             border-radius: 12px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+
         }
+
+        /* Buttons */
         .stButton>button {
             background: #1e3799;
             border: none;
@@ -74,6 +90,8 @@ st.markdown("""
             color: white;
             font-weight: 500;
         }
+
+        /* Toast Notifications */
         .stToast {
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
@@ -103,7 +121,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nama TEXT UNIQUE NOT NULL,
             stok INTEGER NOT NULL CHECK(stok >= 0),
-            satuan TEXT NOT NULL CHECK(satuan IN ('pcs', 'box', 'rim', 'lusin')),
+            satuan TEXT NOT NULL,
             keterangan TEXT
         )
     ''')
@@ -121,7 +139,7 @@ def init_db():
         )
     ''')
 
-    # Trigger untuk update stok
+    # Trigger update stok
     c.execute('''
         CREATE TRIGGER IF NOT EXISTS update_stok
         AFTER INSERT ON transactions
@@ -158,8 +176,7 @@ def fetch_transactions():
 
 
 def get_item_id_by_name(name):
-    df = pd.read_sql("SELECT id FROM items WHERE nama=?",
-                     get_db(), params=(name,))
+    df = pd.read_sql(f"SELECT id FROM items WHERE nama='{name}'", get_db())
     return df['id'].values[0] if not df.empty else None
 
 # ==================================================================================
@@ -212,51 +229,59 @@ def render_sidebar():
 def dashboard_page():
     render_header()
 
-    items = fetch_items()
-    if items.empty:
-        st.warning("Tidak ada data barang")
-        return
-
     col1, col2, col3 = st.columns(3)
+    items = fetch_items()
 
     with col1:
+        # Gunakan st.markdown dengan CSS inline untuk efek container
         st.markdown("""
-            <div class="card" style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px;">
+            <div style="background-color: rgba(255, 255, 255, 0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);">
         """, unsafe_allow_html=True)
-        st.metric("Total Barang", len(items))
+        st.metric("Total Barang", len(items),
+                  delta="+0",
+                  delta_color="off",
+                  help="Jumlah total item yang terdaftar")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
         st.markdown("""
-            <div class="card" style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px;">
+            <div style="background-color: rgba(255, 255, 255, 0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);">
         """, unsafe_allow_html=True)
-        st.metric("Total Stok", items['stok'].sum())
+        st.metric("Total Stok", items['stok'].sum(),
+                  delta="+0",
+                  delta_color="off",
+                  help="Jumlah stok keseluruhan")
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col3:
         st.markdown("""
-            <div class="card" style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px;">
+            <div style="background-color: rgba(255, 255, 255, 0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);">
         """, unsafe_allow_html=True)
         low_stock = len(items[items['stok'] < 10])
-        st.metric("Stok Kritis", low_stock)
+        st.metric("Stok Kritis", low_stock,
+                  delta="+0",
+                  delta_color="inverse",
+                  help="Item dengan stok < 10")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Visualisasi
-    fig = px.bar(
-        items,
-        x='nama',
-        y='stok',
-        title="Distribusi Stok Barang",
-        labels={'nama': 'Barang', 'stok': 'Jumlah Stok'},
-        color='stok',
-        color_continuous_scale='Tealgrn'
-    )
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=20, r=20, t=30, b=20)
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    # Chart
+    if not items.empty:
+        fig = px.bar(
+            items,
+            x='nama',
+            y='stok',
+            title="Distribusi Stok Barang",
+            labels={'nama': 'Barang', 'stok': 'Jumlah Stok'},
+            color='stok',
+            color_continuous_scale='Tealgrn'
+        )
+        fig.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(size=12),
+            margin=dict(l=20, r=20, t=30, b=20)
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
     # Aktivitas terakhir
     st.subheader("Aktivitas Terakhir")
@@ -267,8 +292,15 @@ def dashboard_page():
             column_config={
                 "tanggal": "Waktu",
                 "nama": "Barang",
-                "tipe": "Tipe",
-                "jumlah": st.column_config.NumberColumn("Jumlah", format="%d")
+                "tipe": st.column_config.TextColumn(
+                    "Tipe",
+                    help="masuk/keluar",
+                    default="N/A"
+                ),
+                "jumlah": st.column_config.NumberColumn(
+                    "Jumlah",
+                    format="%d"
+                )
             },
             hide_index=True,
             use_container_width=True
@@ -284,25 +316,29 @@ def barang_page():
 
     with tab1:
         items = fetch_items()
-        if items.empty:
-            st.warning("Tidak ada data barang")
-        else:
-            st.dataframe(
-                items,
-                column_config={
-                    "nama": "Nama Barang",
-                    "stok": st.column_config.NumberColumn("Stok", format="%d"),
-                    "satuan": "Satuan",
-                    "keterangan": "Keterangan"
-                },
-                use_container_width=True,
-                height=300
-            )
+        st.dataframe(
+            items,
+            column_config={
+                "nama": "Nama Barang",
+                "stok": st.column_config.NumberColumn(
+                    "Stok",
+                    format="%d",
+                    help="Jumlah stok saat ini"
+                ),
+                "satuan": "Satuan",
+                "keterangan": "Keterangan"
+            },
+            use_container_width=True,
+            height=300
+        )
 
-        # Aksi massal (dummy)
-        with st.expander("Aksi Massal"):
-            st.selectbox("Pilih Aksi", ["Hapus", "Export"])
-            st.button("Terapkan", disabled=True)
+        # Aksi massal
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.selectbox("Aksi Massal", [
+                         "Hapus", "Export"], label_visibility="collapsed")
+        with col2:
+            st.button("Terapkan", use_container_width=True)
 
     with tab2:
         with st.form("tambah_barang", border=True):
@@ -324,31 +360,20 @@ def barang_page():
                 "Simpan", type="primary", use_container_width=True)
 
             if submitted:
-                if not nama:
-                    st.error("Nama barang wajib diisi!")
-                elif stok < 0:
-                    st.error("Stok tidak boleh negatif!")
-                elif satuan not in ["pcs", "box", "rim", "lusin"]:
-                    st.error("Satuan tidak valid!")
-                else:
+                if nama and stok >= 0 and satuan:
                     try:
                         conn = get_db()
-                        c = conn.cursor()
-                        c.execute(
+                        conn.cursor().execute(
                             "INSERT INTO items (nama, stok, satuan, keterangan) VALUES (?, ?, ?, ?)",
-                            (nama.strip(), stok, satuan,
-                             keterangan.strip() if keterangan else None)
+                            (nama, stok, satuan, keterangan)
                         )
                         conn.commit()
-                        st.success(f"Barang {nama} berhasil ditambahkan!")
+                        st.toast(
+                            f"✅ Barang {nama} berhasil ditambahkan!", icon="🎉")
                     except sqlite3.IntegrityError:
-                        st.error("Nama barang sudah ada!")
-                    except Exception as e:
-                        st.error(f"Terjadi kesalahan: {str(e)}")
-
-# ==================================================================================
-# HALAMAN TRANSAKSI
-# ==================================================================================
+                        st.toast("❌ Nama barang sudah ada!", icon="⚠️")
+                else:
+                    st.toast("⚠️ Lengkapi field wajib", icon="❌")
 
 
 def transaksi_page():
@@ -365,9 +390,7 @@ def transaksi_page():
             keterangan = st.text_area("Keterangan")
 
             if st.form_submit_button("Proses Masuk", type="primary", use_container_width=True):
-                if not item or jumlah <= 0:
-                    st.error("Lengkapi data!")
-                else:
+                if item and jumlah > 0:
                     try:
                         item_id = get_item_id_by_name(item)
                         conn = get_db()
@@ -376,9 +399,12 @@ def transaksi_page():
                             (item_id, 'masuk', jumlah, keterangan)
                         )
                         conn.commit()
-                        st.success(f"Stok {item} berhasil ditambahkan!")
+                        st.toast(
+                            f"✅ Stok {item} berhasil ditambahkan!", icon="🎉")
                     except Exception as e:
-                        st.error(f"Gagal: {str(e)}")
+                        st.toast(f"❌ Gagal: {str(e)}", icon="⚠️")
+                else:
+                    st.toast("⚠️ Lengkapi data", icon="❌")
 
     with tab_keluar:
         with st.form("form_keluar", border=True):
@@ -390,11 +416,7 @@ def transaksi_page():
 
             if st.form_submit_button("Proses Keluar", type="primary", use_container_width=True):
                 item_data = fetch_items()[fetch_items()['nama'] == item]
-                if item_data.empty:
-                    st.error("Barang tidak ditemukan!")
-                elif item_data.iloc[0]['stok'] < jumlah:
-                    st.error("Stok tidak mencukupi!")
-                else:
+                if not item_data.empty and item_data.iloc[0]['stok'] >= jumlah:
                     try:
                         item_id = get_item_id_by_name(item)
                         conn = get_db()
@@ -403,29 +425,23 @@ def transaksi_page():
                             (item_id, 'keluar', jumlah, keterangan)
                         )
                         conn.commit()
-                        st.success(f"Stok {item} berhasil dikurangi!")
+                        st.toast(
+                            f"✅ Stok {item} berhasil dikurangi!", icon="🎉")
                     except Exception as e:
-                        st.error(f"Gagal: {str(e)}")
-
-# ==================================================================================
-# HALAMAN LAPORAN
-# ==================================================================================
+                        st.toast(f"❌ Gagal: {str(e)}", icon="⚠️")
+                else:
+                    st.toast("⚠️ Stok tidak mencukupi", icon="❌")
 
 
 def laporan_page():
     render_header()
-
-    items = fetch_items()
-    if items.empty:
-        st.warning("Tidak ada data barang")
-        return
 
     col1, col2 = st.columns(2)
     start_date = col1.date_input(
         "Tanggal Mulai", datetime.now().replace(day=1))
     end_date = col2.date_input("Tanggal Akhir", datetime.now())
 
-    query = """
+    query = f"""
         SELECT 
             strftime('%Y-%m', tanggal) AS bulan,
             i.nama,
@@ -433,29 +449,22 @@ def laporan_page():
             SUM(CASE WHEN tipe='keluar' THEN jumlah ELSE 0 END) AS total_keluar
         FROM transactions 
         JOIN items i ON transactions.item_id = i.id
-        WHERE tanggal BETWEEN ? AND ?
+        WHERE tanggal BETWEEN '{start_date}' AND '{end_date}'
         GROUP BY bulan, i.nama
     """
-
-    laporan = pd.read_sql(query, get_db(), params=(start_date, end_date))
+    laporan = pd.read_sql(query, get_db())
 
     if not laporan.empty:
         st.dataframe(laporan, use_container_width=True)
-        fig = px.bar(
-            laporan,
-            x='bulan',
-            y=['total_masuk', 'total_keluar'],
-            title="Laporan Bulanan",
-            barmode='group',
-            labels={'value': 'Jumlah', 'variable': 'Tipe Transaksi'}
-        )
+        fig = px.bar(laporan,
+                     x='bulan',
+                     y=['total_masuk', 'total_keluar'],
+                     title="Laporan Bulanan",
+                     barmode='group',
+                     labels={'value': 'Jumlah', 'variable': 'Tipe Transaksi'})
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Tidak ada data untuk periode ini")
-
-# ==================================================================================
-# HALAMAN PENGATURAN
-# ==================================================================================
 
 
 def pengaturan_page():
