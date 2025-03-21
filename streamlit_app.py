@@ -166,7 +166,7 @@ def login_page():
                     "username": username
                 })
                 st.success("Login berhasil! Redirecting...")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Username/password salah!")
 
