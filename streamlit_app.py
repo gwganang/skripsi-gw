@@ -359,6 +359,8 @@ def transaksi_page():
 
             item = st.selectbox("Barang", fetch_items()['nama'].tolist())
             jumlah = st.number_input("Jumlah*", min_value=1)
+            tanggal = st.date_input(
+                "Tanggal Transaksi*", value=datetime.now())  # Tambahkan ini
             keterangan = st.text_area("Keterangan")
 
             if st.form_submit_button("Proses Masuk", type="primary", use_container_width=True):
@@ -369,8 +371,9 @@ def transaksi_page():
                         item_id = get_item_id_by_name(item)
                         conn = get_db()
                         conn.cursor().execute(
-                            "INSERT INTO transactions (item_id, tipe, jumlah, keterangan) VALUES (?, ?, ?, ?)",
-                            (item_id, 'masuk', jumlah, keterangan)
+                            "INSERT INTO transactions (item_id, tipe, jumlah, tanggal, keterangan) VALUES (?, ?, ?, ?, ?)",
+                            (item_id, 'masuk', jumlah, tanggal.strftime(
+                                '%Y-%m-%d'), keterangan)  # Format tanggal
                         )
                         conn.commit()
                         st.success(f"✅ Stok {item} berhasil ditambahkan!")
@@ -383,6 +386,8 @@ def transaksi_page():
 
             item = st.selectbox("Barang", fetch_items()['nama'].tolist())
             jumlah = st.number_input("Jumlah*", min_value=1)
+            tanggal = st.date_input(
+                "Tanggal Transaksi*", value=datetime.now())  # Tambahkan ini
             keterangan = st.text_area("Keterangan")
 
             if st.form_submit_button("Proses Keluar", type="primary", use_container_width=True):
@@ -396,8 +401,9 @@ def transaksi_page():
                         item_id = get_item_id_by_name(item)
                         conn = get_db()
                         conn.cursor().execute(
-                            "INSERT INTO transactions (item_id, tipe, jumlah, keterangan) VALUES (?, ?, ?, ?)",
-                            (item_id, 'keluar', jumlah, keterangan)
+                            "INSERT INTO transactions (item_id, tipe, jumlah, tanggal, keterangan) VALUES (?, ?, ?, ?, ?)",
+                            (item_id, 'keluar', jumlah, tanggal.strftime(
+                                '%Y-%m-%d'), keterangan)  # Format tanggal
                         )
                         conn.commit()
                         st.success(f"✅ Stok {item} berhasil dikurangi!")
