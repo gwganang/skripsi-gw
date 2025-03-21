@@ -135,7 +135,7 @@ def init_db():
 init_db()
 
 # ==================================================================================
-# SISTEM AUTHENTIKASI
+# SISTEM AUTHENTIKASI (Diperbaiki)
 # ==================================================================================
 
 
@@ -146,14 +146,19 @@ def hash_password(password):
 def verify_login(username, password):
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT role FROM users WHERE username=? AND password_hash=?",
-              (username, hash_password(password)))
-    result = c.fetchone()
-    # conn.close() dihapus karena menggunakan cache_resource
-    return result['role'] if result else None
+    input_hash = hash_password(password)
+    c.execute(
+        "SELECT username, password_hash, role FROM users WHERE username=?", (username,))
+    user = c.fetchone()
+
+    if user:
+        stored_hash = user['password_hash']
+        if stored_hash == input_hash:
+            return user['role']
+    return None
 
 # ==================================================================================
-# HALAMAN LOGIN
+# HALAMAN LOGIN (Diperbaiki)
 # ==================================================================================
 
 
@@ -175,7 +180,7 @@ def login_page():
                     "role": role,
                     "username": username
                 })
-                st.success("Login berhasil! Arahkan ke halaman utama...")
+                st.success("Login berhasil! Redirecting...")
                 st.experimental_rerun()
             else:
                 st.error("Username/password salah!")
