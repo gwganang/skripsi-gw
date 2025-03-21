@@ -56,7 +56,7 @@ st.markdown("""
 
         /* Cards */
         .card {
-            background: rgba(255, 255, 255, 0.8);  /* Semi-transparent */
+
             border-radius: 12px;
             padding: 1.5rem;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
@@ -70,7 +70,7 @@ st.markdown("""
         .dataframe {
             border: 1px solid #dee2e6;
             border-radius: 8px;
-            background: rgba(255, 255, 255, 0.8);  /* Semi-transparent */
+
         }
 
         /* Forms */
@@ -78,7 +78,7 @@ st.markdown("""
             padding: 2rem;
             border-radius: 12px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-            background: rgba(255, 255, 255, 0.8);  /* Semi-transparent */
+
         }
 
         /* Buttons */
