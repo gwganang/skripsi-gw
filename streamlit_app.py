@@ -129,13 +129,11 @@ def init_db():
                   ("superadmin", password_hash, "superadmin"))
         conn.commit()
 
-    # conn.close() dihapus untuk mencegah koneksi tertutup
-
 
 init_db()
 
 # ==================================================================================
-# SISTEM AUTHENTIKASI (Diperbaiki)
+# SISTEM AUTHENTIKASI
 # ==================================================================================
 
 
@@ -146,19 +144,13 @@ def hash_password(password):
 def verify_login(username, password):
     conn = get_db()
     c = conn.cursor()
-    input_hash = hash_password(password)
-    c.execute(
-        "SELECT username, password_hash, role FROM users WHERE username=?", (username,))
-    user = c.fetchone()
-
-    if user:
-        stored_hash = user['password_hash']
-        if stored_hash == input_hash:
-            return user['role']
-    return None
+    c.execute("SELECT role FROM users WHERE username=? AND password_hash=?",
+              (username, hash_password(password)))
+    result = c.fetchone()
+    return result[0] if result else None
 
 # ==================================================================================
-# HALAMAN LOGIN (Diperbaiki)
+# HALAMAN LOGIN
 # ==================================================================================
 
 
@@ -535,7 +527,7 @@ def pengaturan_page():
                     except Exception as e:
                         st.error(f"Error: {str(e)}")
 
-    # Tab Kelola User (CRUD)
+    # Tab Kelola User
     with tab2:
         st.subheader("Tambah/Edit User")
         with st.form("user_form"):
