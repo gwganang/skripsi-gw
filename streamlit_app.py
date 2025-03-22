@@ -598,4 +598,4 @@ else:
     st.sidebar.markdown("---")
     if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.clear()
-        st.rerun()  # Fungsi terbaru
+        st.rerun()
