@@ -628,91 +628,158 @@ def laporan_page():
     else:
         st.warning("Tidak ada data untuk parameter yang dipilih")
 
-# ==================================================================================
-# HALAMAN PENGGATURAN
-# ==================================================================================
 
-
+# ==================================================================================
+# HALAMAN PENGGATURAN (DIPERBAIKI)
+# ==================================================================================
 def pengaturan_page():
     check_access(["superadmin"])
     render_header()
-    tab1, tab2, tab3 = st.tabs(["Ubah Password", "Kelola User", "Hapus User"])
 
-    # Tab Ubah Password
+    tab1, tab2 = st.tabs([
+        "🔑 Ubah Password",
+        "👥 Manajemen User"
+    ])
+
+    # =====================================
+    # TAB UBAH PASSWORD
+    # =====================================
     with tab1:
-        with st.form("ubah_password"):
-            st.subheader("Ubah Password")
-            password_lama = st.text_input("Password Lama", type="password")
-            password_baru = st.text_input("Password Baru", type="password")
-            konfirmasi = st.text_input("Konfirmasi Password", type="password")
-            if st.form_submit_button("Simpan", type="primary"):
-                if not password_lama or not password_baru or not konfirmasi:
-                    st.error("Lengkapi semua field!")
-                elif password_baru != konfirmasi:
-                    st.error("Password baru tidak cocok!")
-                else:
-                    try:
-                        conn = get_db()
-                        c = conn.cursor()
-                        c.execute(
-                            "SELECT password FROM users WHERE username=?", (st.session_state.username,))
-                        current_pass = c.fetchone()[0]
-                        if password_lama == current_pass:
-                            c.execute("UPDATE users SET password=? WHERE username=?",
-                                      (password_baru, st.session_state.username))
-                            conn.commit()
-                            st.success("Password berhasil diubah!")
-                        else:
-                            st.error("Password lama salah!")
-                    except Exception as e:
-                        st.error(f"Error: {str(e)}")
+        st.subheader("Ubah Password Superadmin")
+        with st.container():
+            with st.form("password_form", border=True):
+                st.markdown("### Kebijakan Password")
+                st.caption(
+                    "• Minimal 8 karakter | • Mengandung huruf besar dan kecil | • Mengandung angka")
 
-    # Tab Kelola User
+                password_lama = st.text_input("Password Lama", type="password")
+                password_baru = st.text_input("Password Baru", type="password")
+                konfirmasi = st.text_input(
+                    "Konfirmasi Password", type="password")
+
+                if st.form_submit_button("Simpan Perubahan", type="primary", use_container_width=True):
+                    errors = []
+                    if not password_lama:
+                        errors.append("Password lama wajib diisi")
+                    if len(password_baru) < 8:
+                        errors.append("Password baru minimal 8 karakter")
+                    if password_baru != konfirmasi:
+                        errors.append("Konfirmasi password tidak cocok")
+
+                    if errors:
+                        for error in errors:
+                            st.error(error)
+                    else:
+                        try:
+                            conn = get_db()
+                            c = conn.cursor()
+                            c.execute("SELECT password FROM users WHERE username=?",
+                                      (st.session_state.username,))
+                            current_pass = c.fetchone()[0]
+
+                            if password_lama != current_pass:
+                                st.error("Password lama salah!")
+                            else:
+                                c.execute("UPDATE users SET password=? WHERE username=?",
+                                          (password_baru, st.session_state.username))
+                                conn.commit()
+                                st.success("Password berhasil diperbarui!")
+                                st.balloons()
+                        except Exception as e:
+                            st.error(f"Terjadi kesalahan: {str(e)}")
+
+    # =====================================
+    # TAB MANAJEMEN USER (GABUNGAN)
+    # =====================================
     with tab2:
-        st.subheader("Tambah/Edit User")
-        with st.form("user_form"):
-            username = st.text_input("Username*")
-            password = st.text_input("Password*", type="password")
-            role = st.selectbox("Role*", ["admin", "user"])
-            submit_type = st.radio("Tipe", ["Tambah", "Edit"], horizontal=True)
-            if st.form_submit_button("Proses", type="primary"):
-                if not username or not password:
-                    st.error("Data tidak lengkap!")
-                else:
-                    try:
-                        conn = get_db()
-                        c = conn.cursor()
-                        if submit_type == "Tambah":
-                            c.execute(
-                                "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                                (username, password, role)
-                            )
-                        else:
-                            c.execute(
-                                "UPDATE users SET password=?, role=? WHERE username=?",
-                                (password, role, username)
-                            )
-                        conn.commit()
-                        st.success(f"User {username} berhasil diperbarui!")
-                    except sqlite3.IntegrityError:
-                        st.error("Username sudah ada!")
-                    except Exception as e:
-                        st.error(f"Error: {str(e)}")
+        st.subheader("Manajemen Pengguna")
+        user_list = pd.read_sql(
+            "SELECT * FROM users WHERE role != 'superadmin'", get_db())
 
-    # Tab Hapus User
-    with tab3:
-        st.subheader("Hapus User")
-        users = pd.read_sql(
-            "SELECT username FROM users WHERE role != 'superadmin'", get_db())
-        hapus_username = st.selectbox("Pilih User", users)
-        if st.button("Hapus User", type="primary"):
-            try:
-                conn = get_db()
-                conn.cursor().execute("DELETE FROM users WHERE username=?", (hapus_username,))
-                conn.commit()
-                st.success(f"User {hapus_username} berhasil dihapus!")
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
+        # Mode operasi
+        mode = st.radio("Pilih Mode", ["Tambah User", "Edit/Hapus User"],
+                        horizontal=True, label_visibility="collapsed")
+
+        if mode == "Tambah User":
+            with st.form("tambah_user_form", border=True):
+                st.markdown("### Tambah User Baru")
+                new_username = st.text_input("Username*")
+                new_password = st.text_input("Password*", type="password")
+                new_role = st.selectbox("Role*", ["admin", "user"])
+
+                if st.form_submit_button("Tambah User", type="primary", use_container_width=True):
+                    if not new_username or not new_password:
+                        st.error("Semua field wajib diisi!")
+                    else:
+                        try:
+                            conn = get_db()
+                            conn.cursor().execute(
+                                "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                                (new_username, new_password, new_role)
+                            )
+                            conn.commit()
+                            st.success(
+                                f"User {new_username} berhasil ditambahkan!")
+                        except sqlite3.IntegrityError:
+                            st.error("Username sudah ada!")
+                        except Exception as e:
+                            st.error(f"Error: {str(e)}")
+
+        else:  # Mode Edit/Hapus
+            if user_list.empty:
+                st.warning("Tidak ada user yang bisa dikelola")
+            else:
+                selected_user = st.selectbox(
+                    "Pilih User", user_list['username'].tolist())
+                user_data = user_list[user_list['username']
+                                      == selected_user].iloc[0]
+
+                # Form Edit
+                with st.form("edit_user_form", border=True):
+                    st.markdown(f"### Edit User: {selected_user}")
+                    edit_password = st.text_input(
+                        "Password Baru", type="password")
+                    edit_role = st.selectbox("Role*", ["admin", "user"],
+                                             index=0 if user_data['role'] == 'admin' else 1)
+
+                    col1, col2 = st.columns([1, 1])
+                    with col1:
+                        edit_submit = st.form_submit_button(
+                            "Simpan Perubahan", type="primary", use_container_width=True)
+                    with col2:
+                        delete_submit = st.form_submit_button(
+                            "⚠️ Hapus User", type="primary", use_container_width=True)
+
+                    # Handle edit
+                    if edit_submit:
+                        try:
+                            conn = get_db()
+                            conn.cursor().execute(
+                                "UPDATE users SET password=?, role=? WHERE username=?",
+                                (edit_password, edit_role, selected_user)
+                            )
+                            conn.commit()
+                            st.success(
+                                f"User {selected_user} berhasil diperbarui!")
+                        except Exception as e:
+                            st.error(f"Error: {str(e)}")
+
+                    # Handle delete
+                    if delete_submit:
+                        if st.checkbox(f"Konfirmasi hapus {selected_user}"):
+                            try:
+                                conn = get_db()
+                                conn.cursor().execute("DELETE FROM users WHERE username=?", (selected_user,))
+                                conn.commit()
+                                st.success(
+                                    f"User {selected_user} berhasil dihapus!")
+                                st.rerun()  # Refresh halaman setelah hapus
+                            except Exception as e:
+                                st.error(f"Error: {str(e)}")
+                        else:
+                            st.error(
+                                "Centang kotak konfirmasi untuk menghapus")
+
 
 # ==================================================================================
 # FUNGSI PEMBANTU
