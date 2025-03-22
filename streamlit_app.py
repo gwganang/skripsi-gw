@@ -47,6 +47,10 @@ st.markdown("""
             border-radius: 8px;
             padding: 0.8rem 2rem;
         }
+        .dataframe {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -114,15 +118,11 @@ def init_db():
         END;
     ''')
 
-    # Sample data user (password plaintext)
+    # Sample data superadmin (password plaintext)
     c.execute("SELECT * FROM users WHERE username='superadmin'")
     if not c.fetchone():
-        c.execute(
-            "INSERT INTO users (username, password, role) VALUES ('superadmin', 'superadmin123', 'superadmin')")
-        c.execute(
-            "INSERT INTO users (username, password, role) VALUES ('admin', 'admin123', 'admin')")
-        c.execute(
-            "INSERT INTO users (username, password, role) VALUES ('user', 'user123', 'user')")
+        c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                  ("superadmin", "superadmin123", "superadmin"))
         conn.commit()
 
 
@@ -137,9 +137,8 @@ def verify_login(username, password):
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT role FROM users WHERE username=? AND password=?",
-              (username, password))
+              (username, password))  # Password dibandingkan langsung
     result = c.fetchone()
-    conn.close()
     return result[0] if result else None
 
 # ==================================================================================
@@ -166,7 +165,7 @@ def login_page():
                     "username": username
                 })
                 st.success("Login berhasil! Redirecting...")
-                st.rerun()
+                st.rerun()  # Ganti dengan fungsi terbaru
             else:
                 st.error("Username/password salah!")
 
@@ -599,4 +598,4 @@ else:
     st.sidebar.markdown("---")
     if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.clear()
-        st.experimental_rerun()
+        st.rerun()  # Fungsi terbaru
