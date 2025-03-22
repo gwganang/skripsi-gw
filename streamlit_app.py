@@ -27,7 +27,7 @@ st.markdown("""
         }
         .login-container {
             max-width: 400px;
-            margin: 15% auto;
+            margin: 10% auto;  /* Adjusted margin */
             padding: 2rem;
             background: white;
             border-radius: 15px;
@@ -80,19 +80,6 @@ def init_db():
         conn.commit()
 
 # ==================================================================================
-# SISTEM AUTHENTIKASI
-# ==================================================================================
-
-
-def verify_login(username, password):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT role FROM users WHERE username=? AND password=?",
-              (username, password))
-    result = c.fetchone()
-    return result[0] if result else None
-
-# ==================================================================================
 # FUNGSI PEMBANTU UNTUK GAMBAR
 # ==================================================================================
 
@@ -104,6 +91,10 @@ def get_image_base64(image_path):
         return base64.b64encode(img_file.read()).decode('utf-8')
 
 
+def get_logo_base64():
+    return get_image_base64("stock.png")
+
+
 def get_profile_image(role):
     image_map = {
         "superadmin": "superadmin.png",
@@ -111,11 +102,9 @@ def get_profile_image(role):
         "user": "user.png"
     }
     image_path = image_map.get(role, "user.png")
-
     base64_image = get_image_base64(image_path)
     if not base64_image:
         return get_image_base64("user.png")  # Default image
-
     return f"data:image/png;base64,{base64_image}"
 
 # ==================================================================================
@@ -124,7 +113,16 @@ def get_profile_image(role):
 
 
 def login_page():
-    st.markdown('<div class="login-container">', unsafe_allow_html=True)
+    # Tambahkan logo
+    logo_base64 = get_logo_base64()
+    if logo_base64:
+        st.markdown(f"""
+            <div style="text-align: center; margin-bottom: 2rem;">
+                <img src="data:image/png;base64,{logo_base64}" 
+                     style="width: 150px; height: auto;">
+            </div>
+        """, unsafe_allow_html=True)
+
     st.markdown("<h2 style='text-align: center;'>🔐 Login</h2>",
                 unsafe_allow_html=True)
     with st.form("login_form"):
@@ -145,7 +143,20 @@ def login_page():
                 st.error("Username/password salah!")
 
 # ==================================================================================
-# HALAMAN UTAMA
+# SISTEM AUTHENTIKASI
+# ==================================================================================
+
+
+def verify_login(username, password):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT role FROM users WHERE username=? AND password=?",
+              (username, password))
+    result = c.fetchone()
+    return result[0] if result else None
+
+# ==================================================================================
+# HALAMAN UTAMA DAN FUNGSI LAINNYA
 # ==================================================================================
 
 
@@ -160,10 +171,7 @@ def render_header():
 
 def render_sidebar():
     with st.sidebar:
-        # Get profile image
         profile_image = get_profile_image(st.session_state.role)
-
-        # Display profile section
         st.markdown(f"""
             <div style="
                 display: flex;
@@ -184,7 +192,6 @@ def render_sidebar():
             </div>
         """, unsafe_allow_html=True)
 
-        # Menu options
         if st.session_state.role == "superadmin":
             menu = ["Dashboard", "Data Barang",
                     "Transaksi", "Laporan", "Pengaturan"]
@@ -203,10 +210,6 @@ def render_sidebar():
                                 "⚙️ Pengaturan"
         )
 
-# ==================================================================================
-# PROTEKSI HALAMAN
-# ==================================================================================
-
 
 def check_access(required_roles):
     if not st.session_state.get("authenticated", False):
@@ -217,7 +220,7 @@ def check_access(required_roles):
         st.stop()
 
 # ==================================================================================
-# HALAMAN DASHBOARD
+# HALAMAN UTAMA
 # ==================================================================================
 
 
@@ -250,7 +253,6 @@ def dashboard_page():
         st.metric("Stok Kritis", low_stock)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Chart
     fig = px.bar(
         items,
         x='nama',
@@ -267,7 +269,6 @@ def dashboard_page():
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # Aktivitas terakhir
     st.subheader("Aktivitas Terakhir")
     transactions = pd.read_sql("""
         SELECT t.*, i.nama 
@@ -299,6 +300,7 @@ def barang_page():
     check_access(["superadmin", "admin"])
     render_header()
     tab1, tab2 = st.tabs(["Daftar Barang", "Tambah Barang"])
+
     with tab1:
         items = pd.read_sql("SELECT * FROM items", get_db())
         if items.empty:
@@ -315,6 +317,7 @@ def barang_page():
                 use_container_width=True,
                 height=300
             )
+
     with tab2:
         with st.form("tambah_barang", border=True):
             st.subheader("Tambah Barang Baru")
@@ -325,6 +328,7 @@ def barang_page():
             stok = st.number_input("Stok Awal*", min_value=0)
             keterangan = st.text_area(
                 "Keterangan", placeholder="Catatan tambahan...")
+
             if st.form_submit_button("Simpan", type="primary"):
                 if not nama:
                     st.error("Nama barang wajib diisi!")
@@ -353,6 +357,7 @@ def transaksi_page():
     check_access(["superadmin", "admin"])
     render_header()
     tab_masuk, tab_keluar = st.tabs(["Tambah Masuk", "Tambah Keluar"])
+
     with tab_masuk:
         with st.form("form_masuk", border=True):
             st.subheader("Tambah Stok Masuk")
@@ -361,6 +366,7 @@ def transaksi_page():
             jumlah = st.number_input("Jumlah*", min_value=1)
             tanggal = st.date_input("Tanggal", value=datetime.now())
             keterangan = st.text_area("Keterangan")
+
             if st.form_submit_button("Proses Masuk", type="primary"):
                 if not item or jumlah <= 0:
                     st.error("Lengkapi data!")
@@ -377,6 +383,7 @@ def transaksi_page():
                         st.success(f"Stok {item} berhasil ditambahkan!")
                     except Exception as e:
                         st.error(f"Gagal: {str(e)}")
+
     with tab_keluar:
         with st.form("form_keluar", border=True):
             st.subheader("Kurangi Stok Keluar")
@@ -385,6 +392,7 @@ def transaksi_page():
             jumlah = st.number_input("Jumlah*", min_value=1)
             tanggal = st.date_input("Tanggal", value=datetime.now())
             keterangan = st.text_area("Keterangan")
+
             if st.form_submit_button("Proses Keluar", type="primary"):
                 item_data = pd.read_sql(
                     f"SELECT * FROM items WHERE nama='{item}'", get_db())
@@ -417,10 +425,12 @@ def laporan_page():
     if items.empty:
         st.warning("Tidak ada data barang")
         return
+
     col1, col2 = st.columns(2)
     start_date = col1.date_input(
         "Tanggal Mulai", datetime.now().replace(day=1))
     end_date = col2.date_input("Tanggal Akhir", datetime.now())
+
     query = """
         SELECT 
             strftime('%Y-%m', tanggal) AS bulan,
@@ -433,6 +443,7 @@ def laporan_page():
         GROUP BY bulan, i.nama
     """
     laporan = pd.read_sql(query, get_db(), params=(start_date, end_date))
+
     if not laporan.empty:
         st.dataframe(laporan, use_container_width=True)
         fig = px.bar(
@@ -448,7 +459,7 @@ def laporan_page():
         st.info("Tidak ada data untuk periode ini")
 
 # ==================================================================================
-# HALAMAN PENGGUNA
+# HALAMAN PENGGATURAN
 # ==================================================================================
 
 
@@ -464,6 +475,7 @@ def pengaturan_page():
             password_lama = st.text_input("Password Lama", type="password")
             password_baru = st.text_input("Password Baru", type="password")
             konfirmasi = st.text_input("Konfirmasi Password", type="password")
+
             if st.form_submit_button("Simpan", type="primary"):
                 if not password_lama or not password_baru or not konfirmasi:
                     st.error("Lengkapi semua field!")
@@ -494,6 +506,7 @@ def pengaturan_page():
             password = st.text_input("Password*", type="password")
             role = st.selectbox("Role*", ["admin", "user"])
             submit_type = st.radio("Tipe", ["Tambah", "Edit"], horizontal=True)
+
             if st.form_submit_button("Proses", type="primary"):
                 if not username or not password:
                     st.error("Data tidak lengkap!")
@@ -502,11 +515,11 @@ def pengaturan_page():
                         conn = get_db()
                         c = conn.cursor()
                         if submit_type == "Tambah":
-                            c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                                      (username, password, role))
+                            c.execute(
+                                "INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (username, password, role))
                         else:
-                            c.execute("UPDATE users SET password=?, role=? WHERE username=?",
-                                      (password, role, username))
+                            c.execute(
+                                "UPDATE users SET password=?, role=? WHERE username=?", (password, role, username))
                         conn.commit()
                         st.success(f"User {username} berhasil diperbarui!")
                     except sqlite3.IntegrityError:
@@ -520,6 +533,7 @@ def pengaturan_page():
         users = pd.read_sql(
             "SELECT username FROM users WHERE role != 'superadmin'", get_db())
         hapus_username = st.selectbox("Pilih User", users)
+
         if st.button("Hapus User", type="primary"):
             try:
                 conn = get_db()
@@ -551,7 +565,6 @@ else:
     elif menu == "Pengaturan":
         pengaturan_page()
 
-    # Tombol Logout
     st.sidebar.markdown("---")
     if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.clear()
