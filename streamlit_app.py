@@ -47,15 +47,11 @@ st.markdown("""
             border-radius: 8px;
             padding: 0.8rem 2rem;
         }
-        .dataframe {
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-        }
     </style>
 """, unsafe_allow_html=True)
 
 # ==================================================================================
-# DATABASE & LOGIC (Disesuaikan dengan password plaintext)
+# DATABASE & LOGIC
 # ==================================================================================
 
 
@@ -68,7 +64,7 @@ def init_db():
     conn = get_db()
     c = conn.cursor()
 
-    # Tabel Users (password plaintext)
+    # Tabel Users (sesuai skema Anda)
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,55 +74,12 @@ def init_db():
         )
     ''')
 
-    # Tabel Barang
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nama TEXT UNIQUE NOT NULL,
-            stok INTEGER NOT NULL CHECK(stok >= 0),
-            satuan TEXT NOT NULL,
-            keterangan TEXT
-        )
-    ''')
-
-    # Tabel Transaksi
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            item_id INTEGER,
-            tipe TEXT CHECK(tipe IN ('masuk', 'keluar')) NOT NULL,
-            jumlah INTEGER NOT NULL CHECK(jumlah > 0),
-            tanggal DATE DEFAULT CURRENT_DATE,
-            keterangan TEXT,
-            FOREIGN KEY(item_id) REFERENCES items(id)
-        )
-    ''')
-
-    # Trigger Update Stok
-    c.execute('''
-        CREATE TRIGGER IF NOT EXISTS update_stok
-        AFTER INSERT ON transactions
-        FOR EACH ROW
-        WHEN (SELECT stok FROM items WHERE id = NEW.item_id) >= NEW.jumlah OR NEW.tipe = 'masuk'
-        BEGIN
-            UPDATE items
-            SET stok = stok + (CASE 
-                                WHEN NEW.tipe = 'masuk' THEN NEW.jumlah
-                                WHEN NEW.tipe = 'keluar' THEN -NEW.jumlah
-                               END)
-            WHERE id = NEW.item_id;
-        END;
-    ''')
-
-    # Sample data superadmin (password plaintext)
+    # Sample superadmin jika belum ada
     c.execute("SELECT * FROM users WHERE username='superadmin'")
     if not c.fetchone():
-        c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                  ("superadmin", "superadmin123", "superadmin"))
+        c.execute(
+            "INSERT INTO users (username, password, role) VALUES ('superadmin', 'superadmin123', 'superadmin')")
         conn.commit()
-
-
-init_db()
 
 # ==================================================================================
 # SISTEM AUTHENTIKASI (Tanpa Hashing)
@@ -137,7 +90,7 @@ def verify_login(username, password):
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT role FROM users WHERE username=? AND password=?",
-              (username, password))  # Password dibandingkan langsung
+              (username, password))  # Password plaintext
     result = c.fetchone()
     return result[0] if result else None
 
@@ -165,7 +118,7 @@ def login_page():
                     "username": username
                 })
                 st.success("Login berhasil! Redirecting...")
-                st.rerun()  # Ganti dengan fungsi terbaru
+                st.rerun()  # Fungsi terbaru Streamlit
             else:
                 st.error("Username/password salah!")
 
@@ -477,7 +430,7 @@ def laporan_page():
         st.info("Tidak ada data untuk periode ini")
 
 # ==================================================================================
-# HALAMAN PENGGUNA (Disesuaikan dengan password plaintext)
+# HALAMAN PENGGUNA (Sesuai Skema Anda)
 # ==================================================================================
 
 
@@ -504,8 +457,8 @@ def pengaturan_page():
                     try:
                         conn = get_db()
                         c = conn.cursor()
-                        c.execute(
-                            "SELECT password FROM users WHERE username=?", (st.session_state.username,))
+                        c.execute("SELECT password FROM users WHERE username=?",
+                                  (st.session_state.username,))
                         current_pass = c.fetchone()[0]
 
                         if password_lama == current_pass:
@@ -517,8 +470,6 @@ def pengaturan_page():
                             st.error("Password lama salah!")
                     except Exception as e:
                         st.error(f"Error: {str(e)}")
-                    finally:
-                        conn.close()
 
     # Tab Kelola User
     with tab2:
@@ -550,8 +501,6 @@ def pengaturan_page():
                         st.error("Username sudah ada!")
                     except Exception as e:
                         st.error(f"Error: {str(e)}")
-                    finally:
-                        conn.close()
 
     # Tab Hapus User
     with tab3:
@@ -568,8 +517,6 @@ def pengaturan_page():
                 st.success(f"User {hapus_username} berhasil dihapus!")
             except Exception as e:
                 st.error(f"Error: {str(e)}")
-            finally:
-                conn.close()
 
 
 # ==================================================================================
@@ -598,4 +545,4 @@ else:
     st.sidebar.markdown("---")
     if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.clear()
-        st.rerun()  # Fungsi terbaru
+        st.rerun()
