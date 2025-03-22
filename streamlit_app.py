@@ -2,9 +2,10 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, timedelta
 import base64
 import os
+from st_aggrid import AgGrid, GridOptionsBuilder
 
 # ==================================================================================
 # KONFIGURASI AWAL
@@ -274,7 +275,6 @@ def render_sidebar():
                 </div>
             </div>
         """, unsafe_allow_html=True)
-
         if st.session_state.role == "superadmin":
             menu = ["Dashboard", "Data Barang",
                     "Transaksi", "Laporan", "Pengaturan"]
@@ -282,7 +282,6 @@ def render_sidebar():
             menu = ["Dashboard", "Data Barang", "Transaksi", "Laporan"]
         else:
             menu = ["Dashboard", "Laporan"]
-
         return st.radio(
             "Menu",
             menu,
@@ -301,7 +300,6 @@ def render_sidebar():
 def dashboard_page():
     check_access(["superadmin", "admin", "user"])
     render_header()
-
     items = pd.read_sql("SELECT * FROM items", get_db())
     transactions = pd.read_sql("""
         SELECT t.*, i.nama 
@@ -312,7 +310,6 @@ def dashboard_page():
 
     # Metric Cards
     col1, col2, col3 = st.columns(3)
-
     with col1:
         create_metric_card(
             icon="fas fa-boxes",
@@ -320,7 +317,6 @@ def dashboard_page():
             label="Total Barang",
             color="#4CAF50"
         )
-
     with col2:
         create_metric_card(
             icon="fas fa-layer-group",
@@ -328,7 +324,6 @@ def dashboard_page():
             label="Total Stok",
             color="#2196F3"
         )
-
     with col3:
         low_stock = len(items[items['stok'] < 10])
         create_metric_card(
@@ -351,7 +346,6 @@ def dashboard_page():
             color_continuous_scale='Viridis',
             hover_data={'nama': True, 'stok': True, 'satuan': True}
         )
-
         fig.update_layout(
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
@@ -377,7 +371,6 @@ def dashboard_page():
                 )
             ]
         )
-
         fig.add_hline(y=10, line_dash="dot", line_color="red")
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -389,7 +382,6 @@ def dashboard_page():
         transactions['status'] = transactions['tipe'].apply(
             lambda x: "✅ Masuk" if x == "masuk" else "❌ Keluar"
         )
-
         st.dataframe(
             transactions[['tanggal', 'nama', 'status', 'jumlah']],
             column_config={
@@ -415,9 +407,7 @@ def dashboard_page():
 def barang_page():
     check_access(["superadmin", "admin"])
     render_header()
-
     tab1, tab2 = st.tabs(["Daftar Barang", "Tambah Barang"])
-
     with tab1:
         items = pd.read_sql("SELECT * FROM items", get_db())
         if items.empty:
@@ -434,7 +424,6 @@ def barang_page():
                 use_container_width=True,
                 height=300
             )
-
     with tab2:
         with st.form("tambah_barang", border=True):
             st.subheader("Tambah Barang Baru")
@@ -445,7 +434,6 @@ def barang_page():
             stok = st.number_input("Stok Awal*", min_value=0)
             keterangan = st.text_area(
                 "Keterangan", placeholder="Catatan tambahan...")
-
             if st.form_submit_button("Simpan", type="primary"):
                 if not nama:
                     st.error("Nama barang wajib diisi!")
@@ -473,9 +461,7 @@ def barang_page():
 def transaksi_page():
     check_access(["superadmin", "admin"])
     render_header()
-
     tab_masuk, tab_keluar = st.tabs(["Tambah Masuk", "Tambah Keluar"])
-
     with tab_masuk:
         with st.form("form_masuk", border=True):
             st.subheader("Tambah Stok Masuk")
@@ -484,7 +470,6 @@ def transaksi_page():
             jumlah = st.number_input("Jumlah*", min_value=1)
             tanggal = st.date_input("Tanggal", value=datetime.now())
             keterangan = st.text_area("Keterangan")
-
             if st.form_submit_button("Proses Masuk", type="primary"):
                 if not item or jumlah <= 0:
                     st.error("Lengkapi data!")
@@ -493,15 +478,20 @@ def transaksi_page():
                         item_id = pd.read_sql(
                             f"SELECT id FROM items WHERE nama='{item}'", get_db()).iloc[0]['id']
                         conn = get_db()
+                        # Insert transaction
                         conn.cursor().execute(
                             "INSERT INTO transactions (item_id, tipe, jumlah, tanggal, keterangan) VALUES (?, ?, ?, ?, ?)",
                             (item_id, 'masuk', jumlah, tanggal, keterangan)
+                        )
+                        # Update stock
+                        conn.cursor().execute(
+                            "UPDATE items SET stok = stok + ? WHERE id = ?",
+                            (jumlah, item_id)
                         )
                         conn.commit()
                         st.success(f"Stok {item} berhasil ditambahkan!")
                     except Exception as e:
                         st.error(f"Gagal: {str(e)}")
-
     with tab_keluar:
         with st.form("form_keluar", border=True):
             st.subheader("Kurangi Stok Keluar")
@@ -510,7 +500,6 @@ def transaksi_page():
             jumlah = st.number_input("Jumlah*", min_value=1)
             tanggal = st.date_input("Tanggal", value=datetime.now())
             keterangan = st.text_area("Keterangan")
-
             if st.form_submit_button("Proses Keluar", type="primary"):
                 item_data = pd.read_sql(
                     f"SELECT * FROM items WHERE nama='{item}'", get_db())
@@ -522,9 +511,15 @@ def transaksi_page():
                     try:
                         item_id = item_data['id'].values[0]
                         conn = get_db()
+                        # Insert transaction
                         conn.cursor().execute(
                             "INSERT INTO transactions (item_id, tipe, jumlah, tanggal, keterangan) VALUES (?, ?, ?, ?, ?)",
                             (item_id, 'keluar', jumlah, tanggal, keterangan)
+                        )
+                        # Update stock
+                        conn.cursor().execute(
+                            "UPDATE items SET stok = stok - ? WHERE id = ?",
+                            (jumlah, item_id)
                         )
                         conn.commit()
                         st.success(f"Stok {item} berhasil dikurangi!")
@@ -532,7 +527,7 @@ def transaksi_page():
                         st.error(f"Gagal: {str(e)}")
 
 # ==================================================================================
-# HALAMAN LAPORAN
+# HALAMAN LAPORAN (DIPERBAIKI)
 # ==================================================================================
 
 
@@ -540,43 +535,98 @@ def laporan_page():
     check_access(["superadmin", "admin", "user"])
     render_header()
 
+    # Fungsi untuk menghasilkan laporan
+    def generate_report(items, start_date, end_date, aggregation):
+        date_format = {
+            "Harian": "%Y-%m-%d",
+            "Mingguan": "%Y-%U",
+            "Bulanan": "%Y-%m",
+            "Tahunan": "%Y"
+        }[aggregation]
+
+        query = f"""
+            SELECT 
+                strftime('{date_format}', tanggal) AS periode,
+                i.nama,
+                SUM(CASE WHEN tipe='masuk' THEN jumlah ELSE 0 END) AS total_masuk,
+                SUM(CASE WHEN tipe='keluar' THEN jumlah ELSE 0 END) AS total_keluar
+            FROM transactions 
+            JOIN items i ON transactions.item_id = i.id
+            WHERE tanggal BETWEEN ? AND ?
+            GROUP BY periode, i.nama
+        """
+        return pd.read_sql(query, get_db(), params=(start_date, end_date))
+
+    # Filter dan kontrol
+    st.subheader("Pengaturan Laporan")
+    col1, col2, col3 = st.columns(3)
     items = pd.read_sql("SELECT nama FROM items", get_db())
-    if items.empty:
-        st.warning("Tidak ada data barang")
-        return
+    selected_items = col1.multiselect("Filter Barang", items['nama'].unique())
+    aggregation = col2.selectbox(
+        "Aggregasi", ["Harian", "Mingguan", "Bulanan", "Tahunan"])
 
-    col1, col2 = st.columns(2)
-    start_date = col1.date_input(
-        "Tanggal Mulai", datetime.now().replace(day=1))
-    end_date = col2.date_input("Tanggal Akhir", datetime.now())
+    start_date = col3.date_input(
+        "Tanggal Mulai", datetime.now() - timedelta(days=30))
+    end_date = col3.date_input("Tanggal Akhir", datetime.now())
 
-    query = """
-        SELECT 
-            strftime('%Y-%m', tanggal) AS bulan,
-            i.nama,
-            SUM(CASE WHEN tipe='masuk' THEN jumlah ELSE 0 END) AS total_masuk,
-            SUM(CASE WHEN tipe='keluar' THEN jumlah ELSE 0 END) AS total_keluar
-        FROM transactions 
-        JOIN items i ON transactions.item_id = i.id
-        WHERE tanggal BETWEEN ? AND ?
-        GROUP BY bulan, i.nama
-    """
-    laporan = pd.read_sql(query, get_db(), params=(start_date, end_date))
-
-    if not laporan.empty:
-        st.dataframe(laporan, use_container_width=True)
-
-        fig = px.bar(
-            laporan,
-            x='bulan',
-            y=['total_masuk', 'total_keluar'],
-            title="Laporan Bulanan",
-            barmode='group',
-            labels={'value': 'Jumlah', 'variable': 'Tipe'}
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    # Proses data
+    if selected_items:
+        filtered_items = ", ".join([f"'{item}'" for item in selected_items])
+        query_filter = f" AND i.nama IN ({filtered_items})"
     else:
-        st.info("Tidak ada data untuk periode ini")
+        query_filter = ""
+
+    df = generate_report(items, start_date, end_date, aggregation)
+
+    # Tampilkan hasil
+    if not df.empty:
+        # Ringkasan metrik
+        total_masuk = df['total_masuk'].sum()
+        total_keluar = df['total_keluar'].sum()
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Masuk", f"{total_masuk} item")
+        col2.metric("Total Keluar", f"{total_keluar} item")
+        col3.metric("Net Perubahan", f"{total_masuk - total_keluar} item")
+
+        # Chart interaktif
+        fig = px.line(df,
+                      x='periode',
+                      y=['total_masuk', 'total_keluar'],
+                      color='nama',
+                      title='Tren Stok',
+                      labels={
+                          'periode': 'Periode',
+                          'value': 'Jumlah'
+                      })
+        fig.update_layout(hovermode='x unified')
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Tabel detail
+        st.subheader("Data Detail")
+        gb = GridOptionsBuilder.from_dataframe(df)
+        gb.configure_pagination(paginationPageSize=10)
+        gb.configure_side_bar()
+        gridOptions = gb.build()
+
+        AgGrid(df,
+               gridOptions=gridOptions,
+               enable_enterprise_modules=False,
+               allow_unsafe_jscode=True)
+
+        # Export options
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Export ke Excel"):
+                with pd.ExcelWriter("laporan.xlsx", engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False)
+                st.success("File Excel berhasil dibuat!")
+        with col2:
+            if st.button("Export ke CSV"):
+                df.to_csv("laporan.csv", index=False)
+                st.success("File CSV berhasil dibuat!")
+    else:
+        st.warning("Tidak ada data untuk parameter yang dipilih")
 
 # ==================================================================================
 # HALAMAN PENGGATURAN
@@ -586,7 +636,6 @@ def laporan_page():
 def pengaturan_page():
     check_access(["superadmin"])
     render_header()
-
     tab1, tab2, tab3 = st.tabs(["Ubah Password", "Kelola User", "Hapus User"])
 
     # Tab Ubah Password
@@ -596,7 +645,6 @@ def pengaturan_page():
             password_lama = st.text_input("Password Lama", type="password")
             password_baru = st.text_input("Password Baru", type="password")
             konfirmasi = st.text_input("Konfirmasi Password", type="password")
-
             if st.form_submit_button("Simpan", type="primary"):
                 if not password_lama or not password_baru or not konfirmasi:
                     st.error("Lengkapi semua field!")
@@ -627,7 +675,6 @@ def pengaturan_page():
             password = st.text_input("Password*", type="password")
             role = st.selectbox("Role*", ["admin", "user"])
             submit_type = st.radio("Tipe", ["Tambah", "Edit"], horizontal=True)
-
             if st.form_submit_button("Proses", type="primary"):
                 if not username or not password:
                     st.error("Data tidak lengkap!")
@@ -658,7 +705,6 @@ def pengaturan_page():
         users = pd.read_sql(
             "SELECT username FROM users WHERE role != 'superadmin'", get_db())
         hapus_username = st.selectbox("Pilih User", users)
-
         if st.button("Hapus User", type="primary"):
             try:
                 conn = get_db()
@@ -708,7 +754,6 @@ else:
         laporan_page()
     elif menu == "Pengaturan":
         pengaturan_page()
-
     st.sidebar.markdown("---")
     if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.clear()
