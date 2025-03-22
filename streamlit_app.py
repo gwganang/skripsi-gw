@@ -58,25 +58,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ==================================================================================
-# RENDER SIDEBAR (Dengan Gambar Profil)
-# ==================================================================================
-
-
-def render_sidebar():
-    with st.sidebar:
-        # Menentukan gambar berdasarkan role
-        role = st.session_state.role
-        # Format: icon/superadmin.png, icon/admin.png, dll
-        image_path = f"icon/{role}.png"
-
-        st.markdown(f"""
-            <div style="text-align: center; margin: 2rem 0;">
-                <img src="{image_path}" class="profile-icon">
-                <h3 style="color: #1e3799;">Halo, {st.session_state.username}</h3>
-                <p style="color: #6c757d;">Role: {st.session_state.role}</p>
-            </div>
-        """, unsafe_allow_html=True)
 
 # ==================================================================================
 # DATABASE & LOGIC
@@ -166,8 +147,14 @@ def render_header():
 
 def render_sidebar():
     with st.sidebar:
+        # Menentukan gambar berdasarkan role
+        role = st.session_state.role
+        # Format: icon/superadmin.png, icon/admin.png, dll
+        image_path = f"icon/{role}.png"
+
         st.markdown(f"""
             <div style="text-align: center; margin: 2rem 0;">
+                <img src="{image_path}" class="profile-icon">
                 <h3 style="color: #1e3799;">Halo, {st.session_state.username}</h3>
                 <p style="color: #6c757d;">Role: {st.session_state.role}</p>
             </div>
