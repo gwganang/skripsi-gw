@@ -3,6 +3,8 @@ import sqlite3
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+import base64
+import os
 
 # ==================================================================================
 # KONFIGURASI AWAL
@@ -91,6 +93,32 @@ def verify_login(username, password):
     return result[0] if result else None
 
 # ==================================================================================
+# FUNGSI PEMBANTU UNTUK GAMBAR
+# ==================================================================================
+
+
+def get_image_base64(image_path):
+    if not os.path.exists(image_path):
+        return None
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode('utf-8')
+
+
+def get_profile_image(role):
+    image_map = {
+        "superadmin": "superadmin.png",
+        "admin": "admin.png",
+        "user": "user.png"
+    }
+    image_path = image_map.get(role, "user.png")
+
+    base64_image = get_image_base64(image_path)
+    if not base64_image:
+        return get_image_base64("user.png")  # Default image
+
+    return f"data:image/png;base64,{base64_image}"
+
+# ==================================================================================
 # HALAMAN LOGIN
 # ==================================================================================
 
@@ -132,14 +160,10 @@ def render_header():
 
 def render_sidebar():
     with st.sidebar:
-        # Mapping gambar berdasarkan role
-        role_image = {
-            "superadmin": "superadmin.png",
-            "admin": "admin.png",
-            "user": "user.png"
-        }.get(st.session_state.role, "user.png")
+        # Get profile image
+        profile_image = get_profile_image(st.session_state.role)
 
-        # Tampilkan profil dengan gambar
+        # Display profile section
         st.markdown(f"""
             <div style="
                 display: flex;
@@ -152,7 +176,7 @@ def render_sidebar():
                 background: white;
                 box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             ">
-                <img src="{role_image}" style="width: 100px; height: auto; margin-right: 1rem;">
+                <img src="{profile_image}" style="width: 100px; height: auto; margin-right: 1rem; border-radius: 50%;">
                 <div>
                     <h3 style="color: #1e3799; margin: 0;">Halo, {st.session_state.username}</h3>
                     <p style="color: #6c757d; margin: 0.5rem 0 0;">Role: {st.session_state.role}</p>
@@ -160,7 +184,7 @@ def render_sidebar():
             </div>
         """, unsafe_allow_html=True)
 
-        # Menu sesuai role
+        # Menu options
         if st.session_state.role == "superadmin":
             menu = ["Dashboard", "Data Barang",
                     "Transaksi", "Laporan", "Pengaturan"]
