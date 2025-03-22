@@ -70,7 +70,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
+            password TEXT NOT NULL,
             role TEXT CHECK(role IN ('superadmin', 'admin', 'user')) NOT NULL DEFAULT 'user'
         )
     ''')
@@ -118,11 +118,11 @@ def init_db():
     # Sample data user
     c.execute("SELECT * FROM users WHERE username='superadmin'")
     if not c.fetchone():
-        c.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+        c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
                   ("superadmin", sha256("superadmin123".encode()).hexdigest(), "superadmin"))
-        c.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+        c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
                   ("admin", sha256("admin123".encode()).hexdigest(), "admin"))
-        c.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+        c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
                   ("user", sha256("user123".encode()).hexdigest(), "user"))
         conn.commit()
 
@@ -141,7 +141,7 @@ def hash_password(password):
 def verify_login(username, password):
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT role, password_hash FROM users WHERE username=?", (username,))
+    c.execute("SELECT role, password FROM users WHERE username=?", (username,))
     result = c.fetchone()
     if result and result[1] == hash_password(password):
         return result[0]
@@ -205,13 +205,13 @@ def pengaturan_page():
                         try:
                             conn = get_db()
                             c = conn.cursor()
-                            c.execute("SELECT password_hash FROM users WHERE username=?",
+                            c.execute("SELECT password FROM users WHERE username=?",
                                       (st.session_state.username,))
                             current_hash = c.fetchone()[0]
 
                             if hash_password(password_lama) == current_hash:
                                 new_hash = hash_password(password_baru)
-                                c.execute("UPDATE users SET password_hash=? WHERE username=?",
+                                c.execute("UPDATE users SET password=? WHERE username=?",
                                           (new_hash, st.session_state.username))
                                 conn.commit()
                                 st.success("Password berhasil diubah!")
@@ -239,10 +239,10 @@ def pengaturan_page():
                             c = conn.cursor()
 
                             if submit_type == "Tambah":
-                                c.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                                c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
                                           (username, hash_password(password), role))
                             else:
-                                c.execute("UPDATE users SET password_hash=?, role=? WHERE username=?",
+                                c.execute("UPDATE users SET password=?, role=? WHERE username=?",
                                           (hash_password(password), role, username))
 
                             conn.commit()
@@ -285,13 +285,13 @@ def pengaturan_page():
                     try:
                         conn = get_db()
                         c = conn.cursor()
-                        c.execute("SELECT password_hash FROM users WHERE username=?",
+                        c.execute("SELECT password FROM users WHERE username=?",
                                   (st.session_state.username,))
                         current_hash = c.fetchone()[0]
 
                         if hash_password(password_lama) == current_hash:
                             new_hash = hash_password(password_baru)
-                            c.execute("UPDATE users SET password_hash=? WHERE username=?",
+                            c.execute("UPDATE users SET password=? WHERE username=?",
                                       (new_hash, st.session_state.username))
                             conn.commit()
                             st.success("Password berhasil diubah!")
