@@ -134,7 +134,7 @@ def render_sidebar():
     with st.sidebar:
         # --- MODIFIKASI UNTUK GAMBAR PROFIL ---
         role = st.session_state.role
-        image_path = f"icon/{role}.png"
+        image_path = f"{role}.png"
 
         st.markdown(f"""
             <div style="display: flex; align-items: center; margin: 2rem 0;">
