@@ -78,7 +78,7 @@ def init_db():
         conn.commit()
 
 # ==================================================================================
-# SISTEM AUTHENTIKASI (Tanpa Hashing)
+# SISTEM AUTHENTIKASI
 # ==================================================================================
 
 
@@ -132,21 +132,35 @@ def render_header():
 
 def render_sidebar():
     with st.sidebar:
-        # --- MODIFIKASI UNTUK GAMBAR PROFIL ---
-        role = st.session_state.role
-        image_path = f"{role}.png"
+        # Mapping gambar berdasarkan role
+        role_image = {
+            "superadmin": "superadmin.png",
+            "admin": "admin.png",
+            "user": "user.png"
+        }.get(st.session_state.role, "user.png")
 
+        # Tampilkan profil dengan gambar
         st.markdown(f"""
-            <div style="display: flex; align-items: center; margin: 2rem 0;">
-                <img src="{image_path}" style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px;">
+            <div style="
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+                margin: 2rem 0;
+                padding: 1rem;
+                border-radius: 15px;
+                background: white;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            ">
+                <img src="{role_image}" style="width: 100px; height: auto; margin-right: 1rem;">
                 <div>
                     <h3 style="color: #1e3799; margin: 0;">Halo, {st.session_state.username}</h3>
-                    <p style="color: #6c757d; margin: 0;">Role: {role}</p>
+                    <p style="color: #6c757d; margin: 0.5rem 0 0;">Role: {st.session_state.role}</p>
                 </div>
             </div>
         """, unsafe_allow_html=True)
-        # --- AKHIR MODIFIKASI ---
 
+        # Menu sesuai role
         if st.session_state.role == "superadmin":
             menu = ["Dashboard", "Data Barang",
                     "Transaksi", "Laporan", "Pengaturan"]
@@ -154,14 +168,15 @@ def render_sidebar():
             menu = ["Dashboard", "Data Barang", "Transaksi", "Laporan"]
         else:
             menu = ["Dashboard", "Laporan"]
+
         return st.radio(
             "Menu",
             menu,
             format_func=lambda x: "📊 Dashboard" if x == "Dashboard" else
             "📦 Data Barang" if x == "Data Barang" else
-            "💸 Transaksi" if x == "Transaksi" else
-            "📜 Laporan" if x == "Laporan" else
-            "🛠️ Pengaturan"
+            "🔄 Transaksi" if x == "Transaksi" else
+            "📄 Laporan" if x == "Laporan" else
+                                "⚙️ Pengaturan"
         )
 
 # ==================================================================================
@@ -189,6 +204,7 @@ def dashboard_page():
     if items.empty:
         st.warning("Tidak ada data barang")
         return
+
     col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown("""
@@ -209,6 +225,8 @@ def dashboard_page():
         low_stock = len(items[items['stok'] < 10])
         st.metric("Stok Kritis", low_stock)
         st.markdown("</div>", unsafe_allow_html=True)
+
+    # Chart
     fig = px.bar(
         items,
         x='nama',
@@ -224,6 +242,8 @@ def dashboard_page():
         margin=dict(l=20, r=20, t=30, b=20)
     )
     st.plotly_chart(fig, use_container_width=True)
+
+    # Aktivitas terakhir
     st.subheader("Aktivitas Terakhir")
     transactions = pd.read_sql("""
         SELECT t.*, i.nama 
@@ -404,7 +424,7 @@ def laporan_page():
         st.info("Tidak ada data untuk periode ini")
 
 # ==================================================================================
-# HALAMAN PENGGUNA (Sesuai Skema Anda)
+# HALAMAN PENGGUNA
 # ==================================================================================
 
 
@@ -412,6 +432,8 @@ def pengaturan_page():
     check_access(["superadmin"])
     render_header()
     tab1, tab2, tab3 = st.tabs(["Ubah Password", "Kelola User", "Hapus User"])
+
+    # Tab Ubah Password
     with tab1:
         with st.form("ubah_password"):
             st.subheader("Ubah Password")
@@ -439,6 +461,8 @@ def pengaturan_page():
                             st.error("Password lama salah!")
                     except Exception as e:
                         st.error(f"Error: {str(e)}")
+
+    # Tab Kelola User
     with tab2:
         st.subheader("Tambah/Edit User")
         with st.form("user_form"):
@@ -454,17 +478,19 @@ def pengaturan_page():
                         conn = get_db()
                         c = conn.cursor()
                         if submit_type == "Tambah":
-                            c.execute(
-                                "INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (username, password, role))
+                            c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                                      (username, password, role))
                         else:
-                            c.execute(
-                                "UPDATE users SET password=?, role=? WHERE username=?", (password, role, username))
+                            c.execute("UPDATE users SET password=?, role=? WHERE username=?",
+                                      (password, role, username))
                         conn.commit()
                         st.success(f"User {username} berhasil diperbarui!")
                     except sqlite3.IntegrityError:
                         st.error("Username sudah ada!")
                     except Exception as e:
                         st.error(f"Error: {str(e)}")
+
+    # Tab Hapus User
     with tab3:
         st.subheader("Hapus User")
         users = pd.read_sql(
@@ -500,6 +526,8 @@ else:
         laporan_page()
     elif menu == "Pengaturan":
         pengaturan_page()
+
+    # Tombol Logout
     st.sidebar.markdown("---")
     if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.clear()
