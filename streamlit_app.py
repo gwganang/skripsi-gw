@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 # ==================================================================================
-# SISTEM STYLING
+# SISTEM STYLING (Diperbarui dengan gambar profil)
 # ==================================================================================
 st.markdown("""
     <style>
@@ -47,8 +47,36 @@ st.markdown("""
             border-radius: 8px;
             padding: 0.8rem 2rem;
         }
+        /* Style untuk gambar profil */
+        .profile-icon {
+            width: 100px;
+            height: auto;
+            margin-bottom: 1rem;
+            border-radius: 15%;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
     </style>
 """, unsafe_allow_html=True)
+
+# ==================================================================================
+# RENDER SIDEBAR (Dengan Gambar Profil)
+# ==================================================================================
+
+
+def render_sidebar():
+    with st.sidebar:
+        # Menentukan gambar berdasarkan role
+        role = st.session_state.role
+        # Format: icon/superadmin.png, icon/admin.png, dll
+        image_path = f"icon/{role}.png"
+
+        st.markdown(f"""
+            <div style="text-align: center; margin: 2rem 0;">
+                <img src="{image_path}" class="profile-icon">
+                <h3 style="color: #1e3799;">Halo, {st.session_state.username}</h3>
+                <p style="color: #6c757d;">Role: {st.session_state.role}</p>
+            </div>
+        """, unsafe_allow_html=True)
 
 # ==================================================================================
 # DATABASE & LOGIC
