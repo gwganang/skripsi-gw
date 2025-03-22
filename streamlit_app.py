@@ -3,7 +3,6 @@ import sqlite3
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-from hashlib import sha256
 
 # ==================================================================================
 # KONFIGURASI AWAL
@@ -48,11 +47,15 @@ st.markdown("""
             border-radius: 8px;
             padding: 0.8rem 2rem;
         }
+        .dataframe {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
     </style>
 """, unsafe_allow_html=True)
 
 # ==================================================================================
-# DATABASE & LOGIC
+# DATABASE & LOGIC (Disesuaikan dengan password plaintext)
 # ==================================================================================
 
 
@@ -65,7 +68,7 @@ def init_db():
     conn = get_db()
     c = conn.cursor()
 
-    # Tabel Users
+    # Tabel Users (password plaintext)
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,37 +118,28 @@ def init_db():
         END;
     ''')
 
-    # Sample data user
+    # Sample data superadmin (password plaintext)
     c.execute("SELECT * FROM users WHERE username='superadmin'")
     if not c.fetchone():
         c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                  ("superadmin", sha256("superadmin123".encode()).hexdigest(), "superadmin"))
-        c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                  ("admin", sha256("admin123".encode()).hexdigest(), "admin"))
-        c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                  ("user", sha256("user123".encode()).hexdigest(), "user"))
+                  ("superadmin", "superadmin123", "superadmin"))
         conn.commit()
 
 
 init_db()
 
 # ==================================================================================
-# SISTEM AUTHENTIKASI
+# SISTEM AUTHENTIKASI (Tanpa Hashing)
 # ==================================================================================
-
-
-def hash_password(password):
-    return sha256(password.encode()).hexdigest()
 
 
 def verify_login(username, password):
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT role, password FROM users WHERE username=?", (username,))
+    c.execute("SELECT role FROM users WHERE username=? AND password=?",
+              (username, password))  # Password dibandingkan langsung
     result = c.fetchone()
-    if result and result[1] == hash_password(password):
-        return result[0]
-    return None
+    return result[0] if result else None
 
 # ==================================================================================
 # HALAMAN LOGIN
@@ -171,158 +165,12 @@ def login_page():
                     "username": username
                 })
                 st.success("Login berhasil! Redirecting...")
-                st.rerun()
+                st.rerun()  # Ganti dengan fungsi terbaru
             else:
                 st.error("Username/password salah!")
 
 # ==================================================================================
-# HALAMAN PENGGUNA (Dengan RBAC)
-# ==================================================================================
-
-
-def pengaturan_page():
-    render_header()
-
-    if st.session_state.role == "superadmin":
-        tab1, tab2, tab3 = st.tabs(
-            ["Ubah Password", "Kelola User", "Hapus User"])
-
-        # Tab Ubah Password
-        with tab1:
-            with st.form("ubah_password"):
-                st.subheader("Ubah Password")
-                password_lama = st.text_input("Password Lama", type="password")
-                password_baru = st.text_input("Password Baru", type="password")
-                konfirmasi = st.text_input(
-                    "Konfirmasi Password", type="password")
-
-                if st.form_submit_button("Simpan", type="primary"):
-                    if not password_lama or not password_baru or not konfirmasi:
-                        st.error("Lengkapi semua field!")
-                    elif password_baru != konfirmasi:
-                        st.error("Password baru tidak cocok!")
-                    else:
-                        try:
-                            conn = get_db()
-                            c = conn.cursor()
-                            c.execute("SELECT password FROM users WHERE username=?",
-                                      (st.session_state.username,))
-                            current_hash = c.fetchone()[0]
-
-                            if hash_password(password_lama) == current_hash:
-                                new_hash = hash_password(password_baru)
-                                c.execute("UPDATE users SET password=? WHERE username=?",
-                                          (new_hash, st.session_state.username))
-                                conn.commit()
-                                st.success("Password berhasil diubah!")
-                            else:
-                                st.error("Password lama salah!")
-                        except Exception as e:
-                            st.error(f"Error: {str(e)}")
-
-        # Tab Kelola User
-        with tab2:
-            st.subheader("Tambah/Edit User")
-            with st.form("user_form"):
-                username = st.text_input("Username*")
-                password = st.text_input("Password*", type="password")
-                role = st.selectbox("Role*", ["admin", "user"])
-                submit_type = st.radio(
-                    "Tipe", ["Tambah", "Edit"], horizontal=True)
-
-                if st.form_submit_button("Proses", type="primary"):
-                    if not username or not password:
-                        st.error("Data tidak lengkap!")
-                    else:
-                        try:
-                            conn = get_db()
-                            c = conn.cursor()
-
-                            if submit_type == "Tambah":
-                                c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                                          (username, hash_password(password), role))
-                            else:
-                                c.execute("UPDATE users SET password=?, role=? WHERE username=?",
-                                          (hash_password(password), role, username))
-
-                            conn.commit()
-                            st.success(f"User {username} berhasil diperbarui!")
-                        except sqlite3.IntegrityError:
-                            st.error("Username sudah ada!")
-                        except Exception as e:
-                            st.error(f"Error: {str(e)}")
-
-        # Tab Hapus User
-        with tab3:
-            st.subheader("Hapus User")
-            users = pd.read_sql(
-                "SELECT username FROM users WHERE role != 'superadmin'", get_db())
-            hapus_username = st.selectbox("Pilih User", users)
-
-            if st.button("Hapus User", type="primary"):
-                try:
-                    conn = get_db()
-                    conn.cursor().execute("DELETE FROM users WHERE username=?", (hapus_username,))
-                    conn.commit()
-                    st.success(f"User {hapus_username} berhasil dihapus!")
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
-
-    else:
-        # Admin/User hanya bisa ubah password sendiri
-        with st.form("ubah_password"):
-            st.subheader("Ubah Password")
-            password_lama = st.text_input("Password Lama", type="password")
-            password_baru = st.text_input("Password Baru", type="password")
-            konfirmasi = st.text_input("Konfirmasi Password", type="password")
-
-            if st.form_submit_button("Simpan", type="primary"):
-                if not password_lama or not password_baru or not konfirmasi:
-                    st.error("Lengkapi semua field!")
-                elif password_baru != konfirmasi:
-                    st.error("Password baru tidak cocok!")
-                else:
-                    try:
-                        conn = get_db()
-                        c = conn.cursor()
-                        c.execute("SELECT password FROM users WHERE username=?",
-                                  (st.session_state.username,))
-                        current_hash = c.fetchone()[0]
-
-                        if hash_password(password_lama) == current_hash:
-                            new_hash = hash_password(password_baru)
-                            c.execute("UPDATE users SET password=? WHERE username=?",
-                                      (new_hash, st.session_state.username))
-                            conn.commit()
-                            st.success("Password berhasil diubah!")
-                        else:
-                            st.error("Password lama salah!")
-                    except Exception as e:
-                        st.error(f"Error: {str(e)}")
-
-# ==================================================================================
-# FUNGSI UTILITAS
-# ==================================================================================
-
-
-def fetch_items():
-    return pd.read_sql("SELECT * FROM items", get_db())
-
-
-def fetch_transactions():
-    return pd.read_sql("""
-        SELECT t.*, i.nama 
-        FROM transactions t 
-        JOIN items i ON t.item_id = i.id
-    """, get_db())
-
-
-def get_item_id_by_name(name):
-    df = pd.read_sql(f"SELECT id FROM items WHERE nama='{name}'", get_db())
-    return df['id'].values[0] if not df.empty else None
-
-# ==================================================================================
-# KOMPONEN UI/UX
+# HALAMAN UTAMA
 # ==================================================================================
 
 
@@ -344,15 +192,13 @@ def render_sidebar():
             </div>
         """, unsafe_allow_html=True)
 
-        # Semua role punya menu Pengaturan
         if st.session_state.role == "superadmin":
             menu = ["Dashboard", "Data Barang",
                     "Transaksi", "Laporan", "Pengaturan"]
         elif st.session_state.role == "admin":
-            menu = ["Dashboard", "Data Barang",
-                    "Transaksi", "Laporan", "Pengaturan"]
+            menu = ["Dashboard", "Data Barang", "Transaksi", "Laporan"]
         else:
-            menu = ["Dashboard", "Laporan", "Pengaturan"]
+            menu = ["Dashboard", "Laporan"]
 
         return st.radio(
             "Menu",
@@ -386,7 +232,7 @@ def dashboard_page():
     check_access(["superadmin", "admin", "user"])
     render_header()
 
-    items = fetch_items()
+    items = pd.read_sql("SELECT * FROM items", get_db())
     if items.empty:
         st.warning("Tidak ada data barang")
         return
@@ -394,14 +240,26 @@ def dashboard_page():
     col1, col2, col3 = st.columns(3)
 
     with col1:
+        st.markdown("""
+            <div style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+        """, unsafe_allow_html=True)
         st.metric("Total Barang", len(items))
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
+        st.markdown("""
+            <div style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+        """, unsafe_allow_html=True)
         st.metric("Total Stok", items['stok'].sum())
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with col3:
+        st.markdown("""
+            <div style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+        """, unsafe_allow_html=True)
         low_stock = len(items[items['stok'] < 10])
         st.metric("Stok Kritis", low_stock)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # Chart
     fig = px.bar(
@@ -409,6 +267,7 @@ def dashboard_page():
         x='nama',
         y='stok',
         title="Distribusi Stok Barang",
+        labels={'nama': 'Barang', 'stok': 'Stok'},
         color='stok',
         color_continuous_scale='Tealgrn'
     )
@@ -421,7 +280,13 @@ def dashboard_page():
 
     # Aktivitas terakhir
     st.subheader("Aktivitas Terakhir")
-    transactions = fetch_transactions().tail(5)
+    transactions = pd.read_sql("""
+        SELECT t.*, i.nama 
+        FROM transactions t 
+        JOIN items i ON t.item_id = i.id
+        ORDER BY t.tanggal DESC
+    """, get_db()).head(5)
+
     if not transactions.empty:
         st.dataframe(
             transactions[['tanggal', 'nama', 'tipe', 'jumlah']],
@@ -449,7 +314,7 @@ def barang_page():
     tab1, tab2 = st.tabs(["Daftar Barang", "Tambah Barang"])
 
     with tab1:
-        items = fetch_items()
+        items = pd.read_sql("SELECT * FROM items", get_db())
         if items.empty:
             st.warning("Tidak ada data barang")
         else:
@@ -511,7 +376,8 @@ def transaksi_page():
         with st.form("form_masuk", border=True):
             st.subheader("Tambah Stok Masuk")
 
-            item = st.selectbox("Barang", fetch_items()['nama'].tolist())
+            item = st.selectbox("Barang", pd.read_sql(
+                "SELECT nama FROM items", get_db())['nama'].tolist())
             jumlah = st.number_input("Jumlah*", min_value=1)
             tanggal = st.date_input("Tanggal", value=datetime.now())
             keterangan = st.text_area("Keterangan")
@@ -521,7 +387,8 @@ def transaksi_page():
                     st.error("Lengkapi data!")
                 else:
                     try:
-                        item_id = get_item_id_by_name(item)
+                        item_id = pd.read_sql(
+                            f"SELECT id FROM items WHERE nama='{item}'", get_db()).iloc[0]['id']
                         conn = get_db()
                         conn.cursor().execute(
                             "INSERT INTO transactions (item_id, tipe, jumlah, tanggal, keterangan) VALUES (?, ?, ?, ?, ?)",
@@ -536,13 +403,15 @@ def transaksi_page():
         with st.form("form_keluar", border=True):
             st.subheader("Kurangi Stok Keluar")
 
-            item = st.selectbox("Barang", fetch_items()['nama'].tolist())
+            item = st.selectbox("Barang", pd.read_sql(
+                "SELECT nama FROM items", get_db())['nama'].tolist())
             jumlah = st.number_input("Jumlah*", min_value=1)
             tanggal = st.date_input("Tanggal", value=datetime.now())
             keterangan = st.text_area("Keterangan")
 
             if st.form_submit_button("Proses Keluar", type="primary"):
-                item_data = fetch_items()[fetch_items()['nama'] == item]
+                item_data = pd.read_sql(
+                    f"SELECT * FROM items WHERE nama='{item}'", get_db())
                 if item_data.empty:
                     st.error("Barang tidak ditemukan!")
                 elif item_data['stok'].values[0] < jumlah:
@@ -569,7 +438,7 @@ def laporan_page():
     check_access(["superadmin", "admin", "user"])
     render_header()
 
-    items = fetch_items()
+    items = pd.read_sql("SELECT nama FROM items", get_db())
     if items.empty:
         st.warning("Tidak ada data barang")
         return
@@ -607,6 +476,101 @@ def laporan_page():
     else:
         st.info("Tidak ada data untuk periode ini")
 
+# ==================================================================================
+# HALAMAN PENGGUNA (Disesuaikan dengan password plaintext)
+# ==================================================================================
+
+
+def pengaturan_page():
+    check_access(["superadmin"])
+    render_header()
+
+    tab1, tab2, tab3 = st.tabs(["Ubah Password", "Kelola User", "Hapus User"])
+
+    # Tab Ubah Password
+    with tab1:
+        with st.form("ubah_password"):
+            st.subheader("Ubah Password")
+            password_lama = st.text_input("Password Lama", type="password")
+            password_baru = st.text_input("Password Baru", type="password")
+            konfirmasi = st.text_input("Konfirmasi Password", type="password")
+
+            if st.form_submit_button("Simpan", type="primary"):
+                if not password_lama or not password_baru or not konfirmasi:
+                    st.error("Lengkapi semua field!")
+                elif password_baru != konfirmasi:
+                    st.error("Password baru tidak cocok!")
+                else:
+                    try:
+                        conn = get_db()
+                        c = conn.cursor()
+                        c.execute(
+                            "SELECT password FROM users WHERE username=?", (st.session_state.username,))
+                        current_pass = c.fetchone()[0]
+
+                        if password_lama == current_pass:
+                            c.execute("UPDATE users SET password=? WHERE username=?",
+                                      (password_baru, st.session_state.username))
+                            conn.commit()
+                            st.success("Password berhasil diubah!")
+                        else:
+                            st.error("Password lama salah!")
+                    except Exception as e:
+                        st.error(f"Error: {str(e)}")
+                    finally:
+                        conn.close()
+
+    # Tab Kelola User
+    with tab2:
+        st.subheader("Tambah/Edit User")
+        with st.form("user_form"):
+            username = st.text_input("Username*")
+            password = st.text_input("Password*", type="password")
+            role = st.selectbox("Role*", ["admin", "user"])
+            submit_type = st.radio("Tipe", ["Tambah", "Edit"], horizontal=True)
+
+            if st.form_submit_button("Proses", type="primary"):
+                if not username or not password:
+                    st.error("Data tidak lengkap!")
+                else:
+                    try:
+                        conn = get_db()
+                        c = conn.cursor()
+
+                        if submit_type == "Tambah":
+                            c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                                      (username, password, role))
+                        else:
+                            c.execute("UPDATE users SET password=?, role=? WHERE username=?",
+                                      (password, role, username))
+
+                        conn.commit()
+                        st.success(f"User {username} berhasil diperbarui!")
+                    except sqlite3.IntegrityError:
+                        st.error("Username sudah ada!")
+                    except Exception as e:
+                        st.error(f"Error: {str(e)}")
+                    finally:
+                        conn.close()
+
+    # Tab Hapus User
+    with tab3:
+        st.subheader("Hapus User")
+        users = pd.read_sql(
+            "SELECT username FROM users WHERE role != 'superadmin'", get_db())
+        hapus_username = st.selectbox("Pilih User", users)
+
+        if st.button("Hapus User", type="primary"):
+            try:
+                conn = get_db()
+                conn.cursor().execute("DELETE FROM users WHERE username=?", (hapus_username,))
+                conn.commit()
+                st.success(f"User {hapus_username} berhasil dihapus!")
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+            finally:
+                conn.close()
+
 
 # ==================================================================================
 # MAIN EXECUTION
@@ -634,4 +598,4 @@ else:
     st.sidebar.markdown("---")
     if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.clear()
-        st.rerun()
+        st.rerun()  # Fungsi terbaru
