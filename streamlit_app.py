@@ -17,37 +17,92 @@ st.set_page_config(
 )
 
 # ==================================================================================
-# SISTEM STYLING
+# PENINGKATAN SISTEM STYLING
 # ==================================================================================
 st.markdown("""
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f0f2f6;
+            background-color: #f5f5f5;
+            color: #333333;
+        }
+        .stApp {
+            max-width: 2000px;
+            margin: 0 auto;
+            padding: 2rem;
         }
         .login-container {
-            max-width: 400px;
-            margin: 10% auto;  /* Adjusted margin */
-            padding: 2rem;
+            max-width: 450px;
+            margin: 10% auto;
+            padding: 3rem;
             background: white;
-            border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
         }
         .header {
-            background: linear-gradient(135deg, #2d4263, #1e3799);
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            padding: 3rem;
+            border-radius: 18px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .metric-card {
             padding: 2rem;
             border-radius: 15px;
-            margin-bottom: 2rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+        .metric-icon {
+            font-size: 2.5rem;
+            color: #4CAF50;
+        }
+        .metric-value {
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: #2d3436;
+        }
+        .metric-label {
+            font-size: 1.1rem;
+            color: #7f8c8d;
+            margin-top: 0.75rem;
         }
         .sidebar .sidebar-content {
-            background: #f8f9fa;
-            border-radius: 15px;
+            background: #ffffff;
+            border-radius: 18px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
         .stButton>button {
-            background: #1e3799;
+            background: #4CAF50;
             color: white;
-            border-radius: 8px;
-            padding: 0.8rem 2rem;
+            border-radius: 12px;
+            padding: 1rem 2rem;
+            font-weight: 600;
+            transition: background 0.3s ease;
+        }
+        .stButton>button:hover {
+            background: #45a049;
+        }
+        .dataframe {
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 2px;
+        }
+        .stTabs [data-baseweb="tab"] {
+            padding: 1rem 2rem;
+            border-radius: 12px 12px 0 0;
+            background: #f0f2f6;
+            transition: background 0.3s ease;
+        }
+        .stTabs [aria-selected="true"] {
+            background: white;
+            border-bottom: 2px solid #4CAF50;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -71,6 +126,26 @@ def init_db():
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
             role TEXT CHECK(role IN ('superadmin', 'admin', 'user')) NOT NULL DEFAULT 'user'
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nama TEXT UNIQUE NOT NULL,
+            stok INTEGER NOT NULL,
+            satuan TEXT NOT NULL,
+            keterangan TEXT
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER NOT NULL,
+            tipe TEXT CHECK(tipe IN ('masuk', 'keluar')) NOT NULL,
+            jumlah INTEGER NOT NULL,
+            tanggal DATE NOT NULL,
+            keterangan TEXT,
+            FOREIGN KEY(item_id) REFERENCES items(id)
         )
     ''')
     c.execute("SELECT * FROM users WHERE username='superadmin'")
@@ -104,7 +179,7 @@ def get_profile_image(role):
     image_path = image_map.get(role, "user.png")
     base64_image = get_image_base64(image_path)
     if not base64_image:
-        return get_image_base64("user.png")  # Default image
+        return get_image_base64("user.png")
     return f"data:image/png;base64,{base64_image}"
 
 # ==================================================================================
@@ -113,7 +188,6 @@ def get_profile_image(role):
 
 
 def login_page():
-    # Tambahkan logo
     logo_base64 = get_logo_base64()
     if logo_base64:
         st.markdown(f"""
@@ -122,7 +196,6 @@ def login_page():
                      style="width: 150px; height: auto;">
             </div>
         """, unsafe_allow_html=True)
-
     st.markdown("<h2 style='text-align: center;'>🔐 Login</h2>",
                 unsafe_allow_html=True)
     with st.form("login_form"):
@@ -155,16 +228,27 @@ def verify_login(username, password):
     result = c.fetchone()
     return result[0] if result else None
 
+
+def check_access(required_roles):
+    if not st.session_state.get("authenticated", False):
+        st.error("Anda harus login!")
+        st.stop()
+    if st.session_state.role not in required_roles:
+        st.error("Anda tidak memiliki akses ke halaman ini!")
+        st.stop()
+
 # ==================================================================================
-# HALAMAN UTAMA DAN FUNGSI LAINNYA
+# HEADER DAN SIDEBAR
 # ==================================================================================
 
 
 def render_header():
     st.markdown("""
         <div class="header">
-            <h1>📦 Inventaris Pro</h1>
-            <p>Solusi Manajemen Stok untuk Bisnis Modern</p>
+            <h1 style="color: white; margin-bottom: 1rem;">📦 Inventaris Pro</h1>
+            <p style="color: rgba(255,255,255,0.8); font-size: 1.25rem;">
+                Solusi Manajemen Stok untuk Bisnis Modern
+            </p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -181,7 +265,6 @@ def render_sidebar():
                 margin: 2rem 0;
                 padding: 1rem;
                 border-radius: 15px;
-                background: white;
                 box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             ">
                 <img src="{profile_image}" style="width: 100px; height: auto; margin-right: 1rem; border-radius: 50%;">
@@ -204,92 +287,125 @@ def render_sidebar():
             "Menu",
             menu,
             format_func=lambda x: "📊 Dashboard" if x == "Dashboard" else
-            "📦 Data Barang" if x == "Data Barang" else
-            "🔄 Transaksi" if x == "Transaksi" else
-            "📄 Laporan" if x == "Laporan" else
-                                "⚙️ Pengaturan"
+                                  "📦 Data Barang" if x == "Data Barang" else
+                                  "🔄 Transaksi" if x == "Transaksi" else
+                                  "📄 Laporan" if x == "Laporan" else
+                                  "⚙️ Pengaturan"
         )
 
-
-def check_access(required_roles):
-    if not st.session_state.get("authenticated", False):
-        st.error("Anda harus login!")
-        st.stop()
-    if st.session_state.role not in required_roles:
-        st.error("Anda tidak memiliki akses ke halaman ini!")
-        st.stop()
-
 # ==================================================================================
-# HALAMAN UTAMA
+# HALAMAN DASHBOARD
 # ==================================================================================
 
 
 def dashboard_page():
     check_access(["superadmin", "admin", "user"])
     render_header()
+
     items = pd.read_sql("SELECT * FROM items", get_db())
-    if items.empty:
-        st.warning("Tidak ada data barang")
-        return
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("""
-            <div style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
-        """, unsafe_allow_html=True)
-        st.metric("Total Barang", len(items))
-        st.markdown("</div>", unsafe_allow_html=True)
-    with col2:
-        st.markdown("""
-            <div style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
-        """, unsafe_allow_html=True)
-        st.metric("Total Stok", items['stok'].sum())
-        st.markdown("</div>", unsafe_allow_html=True)
-    with col3:
-        st.markdown("""
-            <div style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
-        """, unsafe_allow_html=True)
-        low_stock = len(items[items['stok'] < 10])
-        st.metric("Stok Kritis", low_stock)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    fig = px.bar(
-        items,
-        x='nama',
-        y='stok',
-        title="Distribusi Stok Barang",
-        labels={'nama': 'Barang', 'stok': 'Stok'},
-        color='stok',
-        color_continuous_scale='Tealgrn'
-    )
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        margin=dict(l=20, r=20, t=30, b=20)
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.subheader("Aktivitas Terakhir")
     transactions = pd.read_sql("""
         SELECT t.*, i.nama 
         FROM transactions t 
         JOIN items i ON t.item_id = i.id
         ORDER BY t.tanggal DESC
     """, get_db()).head(5)
+
+    # Metric Cards
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        create_metric_card(
+            icon="fas fa-boxes",
+            value=len(items),
+            label="Total Barang",
+            color="#4CAF50"
+        )
+
+    with col2:
+        create_metric_card(
+            icon="fas fa-layer-group",
+            value=items['stok'].sum(),
+            label="Total Stok",
+            color="#2196F3"
+        )
+
+    with col3:
+        low_stock = len(items[items['stok'] < 10])
+        create_metric_card(
+            icon="fas fa-exclamation-triangle",
+            value=low_stock,
+            label="Stok Kritis",
+            color="#FF5722"
+        )
+
+    # Stok Distribution Chart
+    st.subheader("Distribusi Stok Barang")
+    if not items.empty:
+        fig = px.bar(
+            items,
+            x='nama',
+            y='stok',
+            title="Klik pada legenda untuk filter",
+            labels={'nama': 'Barang', 'stok': 'Jumlah Stok'},
+            color='stok',
+            color_continuous_scale='Viridis',
+            hover_data={'nama': True, 'stok': True, 'satuan': True}
+        )
+
+        fig.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=20, r=20, t=30, b=20),
+            xaxis_tickangle=45,
+            font=dict(size=14),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            ),
+            annotations=[
+                dict(
+                    x=0.5,
+                    y=1.15,
+                    xref="paper",
+                    yref="paper",
+                    text="Stok Minimum: 10",
+                    showarrow=False,
+                    font=dict(color="red", size=12)
+                )
+            ]
+        )
+
+        fig.add_hline(y=10, line_dash="dot", line_color="red")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("Tidak ada data barang", icon="⚠️")
+
+    # Recent Transactions
+    st.subheader("Aktivitas Terakhir")
     if not transactions.empty:
+        transactions['status'] = transactions['tipe'].apply(
+            lambda x: "✅ Masuk" if x == "masuk" else "❌ Keluar"
+        )
+
         st.dataframe(
-            transactions[['tanggal', 'nama', 'tipe', 'jumlah']],
+            transactions[['tanggal', 'nama', 'status', 'jumlah']],
             column_config={
-                "tanggal": "Waktu",
-                "nama": "Barang",
-                "tipe": "Tipe",
+                "tanggal": st.column_config.DateColumn("Tanggal", format="DD MMM YYYY"),
+                "nama": st.column_config.TextColumn("Barang"),
+                "status": st.column_config.TextColumn("Status",
+                                                      help="✅ Masuk = Penambahan stok | ❌ Keluar = Pengurangan stok",
+                                                      width="medium"
+                                                      ),
                 "jumlah": st.column_config.NumberColumn("Jumlah", format="%d")
             },
             hide_index=True,
             use_container_width=True
         )
     else:
-        st.info("Belum ada aktivitas")
+        st.info("Belum ada aktivitas", icon="ℹ️")
 
 # ==================================================================================
 # HALAMAN DATA BARANG
@@ -299,6 +415,7 @@ def dashboard_page():
 def barang_page():
     check_access(["superadmin", "admin"])
     render_header()
+
     tab1, tab2 = st.tabs(["Daftar Barang", "Tambah Barang"])
 
     with tab1:
@@ -356,6 +473,7 @@ def barang_page():
 def transaksi_page():
     check_access(["superadmin", "admin"])
     render_header()
+
     tab_masuk, tab_keluar = st.tabs(["Tambah Masuk", "Tambah Keluar"])
 
     with tab_masuk:
@@ -421,6 +539,7 @@ def transaksi_page():
 def laporan_page():
     check_access(["superadmin", "admin", "user"])
     render_header()
+
     items = pd.read_sql("SELECT nama FROM items", get_db())
     if items.empty:
         st.warning("Tidak ada data barang")
@@ -446,6 +565,7 @@ def laporan_page():
 
     if not laporan.empty:
         st.dataframe(laporan, use_container_width=True)
+
         fig = px.bar(
             laporan,
             x='bulan',
@@ -466,6 +586,7 @@ def laporan_page():
 def pengaturan_page():
     check_access(["superadmin"])
     render_header()
+
     tab1, tab2, tab3 = st.tabs(["Ubah Password", "Kelola User", "Hapus User"])
 
     # Tab Ubah Password
@@ -516,10 +637,14 @@ def pengaturan_page():
                         c = conn.cursor()
                         if submit_type == "Tambah":
                             c.execute(
-                                "INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (username, password, role))
+                                "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                                (username, password, role)
+                            )
                         else:
                             c.execute(
-                                "UPDATE users SET password=?, role=? WHERE username=?", (password, role, username))
+                                "UPDATE users SET password=?, role=? WHERE username=?",
+                                (password, role, username)
+                            )
                         conn.commit()
                         st.success(f"User {username} berhasil diperbarui!")
                     except sqlite3.IntegrityError:
@@ -543,6 +668,24 @@ def pengaturan_page():
             except Exception as e:
                 st.error(f"Error: {str(e)}")
 
+# ==================================================================================
+# FUNGSI PEMBANTU
+# ==================================================================================
+
+
+def create_metric_card(icon, value, label, color):
+    st.markdown(f"""
+        <div class="metric-card" style="border-left: 5px solid {color};">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <i class="{icon} metric-icon"></i>
+                <div>
+                    <h2 class="metric-value">{value}</h2>
+                    <p class="metric-label">{label}</p>
+                </div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
 
 # ==================================================================================
 # MAIN EXECUTION
@@ -553,6 +696,7 @@ if 'authenticated' not in st.session_state:
 if not st.session_state.authenticated:
     login_page()
 else:
+    init_db()
     menu = render_sidebar()
     if menu == "Dashboard":
         dashboard_page()
