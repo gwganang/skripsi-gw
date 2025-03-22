@@ -63,8 +63,6 @@ def get_db():
 def init_db():
     conn = get_db()
     c = conn.cursor()
-
-    # Tabel Users (sesuai skema Anda)
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,8 +71,6 @@ def init_db():
             role TEXT CHECK(role IN ('superadmin', 'admin', 'user')) NOT NULL DEFAULT 'user'
         )
     ''')
-
-    # Sample superadmin jika belum ada
     c.execute("SELECT * FROM users WHERE username='superadmin'")
     if not c.fetchone():
         c.execute(
@@ -90,7 +86,7 @@ def verify_login(username, password):
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT role FROM users WHERE username=? AND password=?",
-              (username, password))  # Password plaintext
+              (username, password))
     result = c.fetchone()
     return result[0] if result else None
 
@@ -103,12 +99,10 @@ def login_page():
     st.markdown('<div class="login-container">', unsafe_allow_html=True)
     st.markdown("<h2 style='text-align: center;'>🔐 Login</h2>",
                 unsafe_allow_html=True)
-
     with st.form("login_form"):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         submitted = st.form_submit_button("Login")
-
         if submitted:
             role = verify_login(username, password)
             if role:
@@ -118,7 +112,7 @@ def login_page():
                     "username": username
                 })
                 st.success("Login berhasil! Redirecting...")
-                st.rerun()  # Fungsi terbaru Streamlit
+                st.rerun()
             else:
                 st.error("Username/password salah!")
 
@@ -138,12 +132,20 @@ def render_header():
 
 def render_sidebar():
     with st.sidebar:
+        # --- MODIFIKASI UNTUK GAMBAR PROFIL ---
+        role = st.session_state.role
+        image_path = f"icon/{role}.png"
+
         st.markdown(f"""
-            <div style="text-align: center; margin: 2rem 0;">
-                <h3 style="color: #1e3799;">Halo, {st.session_state.username}</h3>
-                <p style="color: #6c757d;">Role: {st.session_state.role}</p>
+            <div style="display: flex; align-items: center; margin: 2rem 0;">
+                <img src="{image_path}" style="width: 60px; height: 60px; border-radius: 50%; margin-right: 15px;">
+                <div>
+                    <h3 style="color: #1e3799; margin: 0;">Halo, {st.session_state.username}</h3>
+                    <p style="color: #6c757d; margin: 0;">Role: {role}</p>
+                </div>
             </div>
         """, unsafe_allow_html=True)
+        # --- AKHIR MODIFIKASI ---
 
         if st.session_state.role == "superadmin":
             menu = ["Dashboard", "Data Barang",
@@ -152,15 +154,14 @@ def render_sidebar():
             menu = ["Dashboard", "Data Barang", "Transaksi", "Laporan"]
         else:
             menu = ["Dashboard", "Laporan"]
-
         return st.radio(
             "Menu",
             menu,
             format_func=lambda x: "📊 Dashboard" if x == "Dashboard" else
             "📦 Data Barang" if x == "Data Barang" else
-            "🔄 Transaksi" if x == "Transaksi" else
-            "📄 Laporan" if x == "Laporan" else
-                                "⚙️ Pengaturan"
+            "💸 Transaksi" if x == "Transaksi" else
+            "📜 Laporan" if x == "Laporan" else
+            "🛠️ Pengaturan"
         )
 
 # ==================================================================================
@@ -184,28 +185,23 @@ def check_access(required_roles):
 def dashboard_page():
     check_access(["superadmin", "admin", "user"])
     render_header()
-
     items = pd.read_sql("SELECT * FROM items", get_db())
     if items.empty:
         st.warning("Tidak ada data barang")
         return
-
     col1, col2, col3 = st.columns(3)
-
     with col1:
         st.markdown("""
             <div style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
         """, unsafe_allow_html=True)
         st.metric("Total Barang", len(items))
         st.markdown("</div>", unsafe_allow_html=True)
-
     with col2:
         st.markdown("""
             <div style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
         """, unsafe_allow_html=True)
         st.metric("Total Stok", items['stok'].sum())
         st.markdown("</div>", unsafe_allow_html=True)
-
     with col3:
         st.markdown("""
             <div style="background: rgba(255,255,255,0.8); padding: 1rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
@@ -213,8 +209,6 @@ def dashboard_page():
         low_stock = len(items[items['stok'] < 10])
         st.metric("Stok Kritis", low_stock)
         st.markdown("</div>", unsafe_allow_html=True)
-
-    # Chart
     fig = px.bar(
         items,
         x='nama',
@@ -230,8 +224,6 @@ def dashboard_page():
         margin=dict(l=20, r=20, t=30, b=20)
     )
     st.plotly_chart(fig, use_container_width=True)
-
-    # Aktivitas terakhir
     st.subheader("Aktivitas Terakhir")
     transactions = pd.read_sql("""
         SELECT t.*, i.nama 
@@ -239,7 +231,6 @@ def dashboard_page():
         JOIN items i ON t.item_id = i.id
         ORDER BY t.tanggal DESC
     """, get_db()).head(5)
-
     if not transactions.empty:
         st.dataframe(
             transactions[['tanggal', 'nama', 'tipe', 'jumlah']],
@@ -263,9 +254,7 @@ def dashboard_page():
 def barang_page():
     check_access(["superadmin", "admin"])
     render_header()
-
     tab1, tab2 = st.tabs(["Daftar Barang", "Tambah Barang"])
-
     with tab1:
         items = pd.read_sql("SELECT * FROM items", get_db())
         if items.empty:
@@ -282,11 +271,9 @@ def barang_page():
                 use_container_width=True,
                 height=300
             )
-
     with tab2:
         with st.form("tambah_barang", border=True):
             st.subheader("Tambah Barang Baru")
-
             col1, col2 = st.columns(2)
             nama = col1.text_input(
                 "Nama Barang*", placeholder="Contoh: Kertas A4")
@@ -294,7 +281,6 @@ def barang_page():
             stok = st.number_input("Stok Awal*", min_value=0)
             keterangan = st.text_area(
                 "Keterangan", placeholder="Catatan tambahan...")
-
             if st.form_submit_button("Simpan", type="primary"):
                 if not nama:
                     st.error("Nama barang wajib diisi!")
@@ -322,19 +308,15 @@ def barang_page():
 def transaksi_page():
     check_access(["superadmin", "admin"])
     render_header()
-
     tab_masuk, tab_keluar = st.tabs(["Tambah Masuk", "Tambah Keluar"])
-
     with tab_masuk:
         with st.form("form_masuk", border=True):
             st.subheader("Tambah Stok Masuk")
-
             item = st.selectbox("Barang", pd.read_sql(
                 "SELECT nama FROM items", get_db())['nama'].tolist())
             jumlah = st.number_input("Jumlah*", min_value=1)
             tanggal = st.date_input("Tanggal", value=datetime.now())
             keterangan = st.text_area("Keterangan")
-
             if st.form_submit_button("Proses Masuk", type="primary"):
                 if not item or jumlah <= 0:
                     st.error("Lengkapi data!")
@@ -351,17 +333,14 @@ def transaksi_page():
                         st.success(f"Stok {item} berhasil ditambahkan!")
                     except Exception as e:
                         st.error(f"Gagal: {str(e)}")
-
     with tab_keluar:
         with st.form("form_keluar", border=True):
             st.subheader("Kurangi Stok Keluar")
-
             item = st.selectbox("Barang", pd.read_sql(
                 "SELECT nama FROM items", get_db())['nama'].tolist())
             jumlah = st.number_input("Jumlah*", min_value=1)
             tanggal = st.date_input("Tanggal", value=datetime.now())
             keterangan = st.text_area("Keterangan")
-
             if st.form_submit_button("Proses Keluar", type="primary"):
                 item_data = pd.read_sql(
                     f"SELECT * FROM items WHERE nama='{item}'", get_db())
@@ -390,17 +369,14 @@ def transaksi_page():
 def laporan_page():
     check_access(["superadmin", "admin", "user"])
     render_header()
-
     items = pd.read_sql("SELECT nama FROM items", get_db())
     if items.empty:
         st.warning("Tidak ada data barang")
         return
-
     col1, col2 = st.columns(2)
     start_date = col1.date_input(
         "Tanggal Mulai", datetime.now().replace(day=1))
     end_date = col2.date_input("Tanggal Akhir", datetime.now())
-
     query = """
         SELECT 
             strftime('%Y-%m', tanggal) AS bulan,
@@ -412,9 +388,7 @@ def laporan_page():
         WHERE tanggal BETWEEN ? AND ?
         GROUP BY bulan, i.nama
     """
-
     laporan = pd.read_sql(query, get_db(), params=(start_date, end_date))
-
     if not laporan.empty:
         st.dataframe(laporan, use_container_width=True)
         fig = px.bar(
@@ -437,17 +411,13 @@ def laporan_page():
 def pengaturan_page():
     check_access(["superadmin"])
     render_header()
-
     tab1, tab2, tab3 = st.tabs(["Ubah Password", "Kelola User", "Hapus User"])
-
-    # Tab Ubah Password
     with tab1:
         with st.form("ubah_password"):
             st.subheader("Ubah Password")
             password_lama = st.text_input("Password Lama", type="password")
             password_baru = st.text_input("Password Baru", type="password")
             konfirmasi = st.text_input("Konfirmasi Password", type="password")
-
             if st.form_submit_button("Simpan", type="primary"):
                 if not password_lama or not password_baru or not konfirmasi:
                     st.error("Lengkapi semua field!")
@@ -457,10 +427,9 @@ def pengaturan_page():
                     try:
                         conn = get_db()
                         c = conn.cursor()
-                        c.execute("SELECT password FROM users WHERE username=?",
-                                  (st.session_state.username,))
+                        c.execute(
+                            "SELECT password FROM users WHERE username=?", (st.session_state.username,))
                         current_pass = c.fetchone()[0]
-
                         if password_lama == current_pass:
                             c.execute("UPDATE users SET password=? WHERE username=?",
                                       (password_baru, st.session_state.username))
@@ -470,8 +439,6 @@ def pengaturan_page():
                             st.error("Password lama salah!")
                     except Exception as e:
                         st.error(f"Error: {str(e)}")
-
-    # Tab Kelola User
     with tab2:
         st.subheader("Tambah/Edit User")
         with st.form("user_form"):
@@ -479,7 +446,6 @@ def pengaturan_page():
             password = st.text_input("Password*", type="password")
             role = st.selectbox("Role*", ["admin", "user"])
             submit_type = st.radio("Tipe", ["Tambah", "Edit"], horizontal=True)
-
             if st.form_submit_button("Proses", type="primary"):
                 if not username or not password:
                     st.error("Data tidak lengkap!")
@@ -487,28 +453,23 @@ def pengaturan_page():
                     try:
                         conn = get_db()
                         c = conn.cursor()
-
                         if submit_type == "Tambah":
-                            c.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                                      (username, password, role))
+                            c.execute(
+                                "INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (username, password, role))
                         else:
-                            c.execute("UPDATE users SET password=?, role=? WHERE username=?",
-                                      (password, role, username))
-
+                            c.execute(
+                                "UPDATE users SET password=?, role=? WHERE username=?", (password, role, username))
                         conn.commit()
                         st.success(f"User {username} berhasil diperbarui!")
                     except sqlite3.IntegrityError:
                         st.error("Username sudah ada!")
                     except Exception as e:
                         st.error(f"Error: {str(e)}")
-
-    # Tab Hapus User
     with tab3:
         st.subheader("Hapus User")
         users = pd.read_sql(
             "SELECT username FROM users WHERE role != 'superadmin'", get_db())
         hapus_username = st.selectbox("Pilih User", users)
-
         if st.button("Hapus User", type="primary"):
             try:
                 conn = get_db()
@@ -529,7 +490,6 @@ if not st.session_state.authenticated:
     login_page()
 else:
     menu = render_sidebar()
-
     if menu == "Dashboard":
         dashboard_page()
     elif menu == "Data Barang":
@@ -540,8 +500,6 @@ else:
         laporan_page()
     elif menu == "Pengaturan":
         pengaturan_page()
-
-    # Tombol Logout
     st.sidebar.markdown("---")
     if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.clear()
