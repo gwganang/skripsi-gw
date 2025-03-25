@@ -322,7 +322,7 @@ def dashboard_page():
             icon="fas fa-layer-group",
             value=items['stok'].sum(),
             label="Total Stok",
-            color="#2196F3"
+            color="#4CAF50"
         )
     with col3:
         low_stock = len(items[items['stok'] < 10])
@@ -330,7 +330,7 @@ def dashboard_page():
             icon="fas fa-exclamation-triangle",
             value=low_stock,
             label="Stok Kritis",
-            color="#FF5722"
+            color="#4CAF50"
         )
 
     # Stok Distribution Chart
