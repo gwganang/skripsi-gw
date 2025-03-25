@@ -14,7 +14,7 @@ st.set_page_config(
     page_title="Inventaris Pro",
     page_icon="📦",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # ==================================================================================
@@ -607,12 +607,38 @@ def laporan_page():
         gb = GridOptionsBuilder.from_dataframe(df)
         gb.configure_pagination(paginationPageSize=10)
         gb.configure_side_bar()
-        gridOptions = gb.build()
+        gb.configure_default_column(
+            resizable=True,
+            filterable=True,
+            sortable=True,
+            autoHeight=True,
+            flex=1  # Auto-expand columns
+        )
+        # Konfigurasi kolom spesifik
+        gb.configure_column(
+            "periode", header_name="Periode", minWidth=150, flex=1)
+        gb.configure_column("nama", header_name="Barang", minWidth=200, flex=2)
+        gb.configure_column("total_masuk", header_name="Total Masuk",
+                            type=["numericColumn"], minWidth=150, flex=1)
+        gb.configure_column("total_keluar", header_name="Total Keluar",
+                            type=["numericColumn"], minWidth=150, flex=1)
 
-        AgGrid(df,
-               gridOptions=gridOptions,
-               enable_enterprise_modules=False,
-               allow_unsafe_jscode=True)
+        gridOptions = gb.build()
+        gridOptions['domLayout'] = 'autoHeight'  # Auto height
+        # Auto-fit columns
+        gridOptions['onGridReady'] = 'function(params) { params.api.sizeColumnsToFit(); }'
+
+        AgGrid(
+            df,
+            gridOptions=gridOptions,
+            enable_enterprise_modules=False,
+            allow_unsafe_jscode=True,
+            height=400,
+            width='100%',
+            fit_columns_on_grid_load=True,
+            theme='streamlit',
+            update_mode='MODEL_CHANGED'
+        )
 
         # Export options
         col1, col2 = st.columns(2)
